@@ -1,0 +1,50 @@
+# ==============================================================================
+# Environment & Secrets (Frontend, Backend, and Root)
+# ==============================================================================
+.env
+.env.*
+!.env.example
+*.env
+*.env.local
+
+# ==============================================================================
+# Backend: Java / Spring Boot / Maven / Gradle
+# ==============================================================================
+backend/**/target/
+**/target/
+backend/**/.mvn/
+backend/**/mvnw
+backend/**/mvnw.cmd
+backend/**/build/
+**/build/
+*.class
+*.jar
+*.war
+*.ear
+*.log
+
+# ==============================================================================
+# Frontend: Node / Vite / React / TypeScript
+# ==============================================================================
+frontend/**/node_modules/
+**/node_modules/
+frontend/**/dist/
+**/dist/
+frontend/**/dist-ssr/
+frontend/**/.next/
+*.local
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ==============================================================================
+# IDEs & System Files
+# ==============================================================================
+.idea/
+*.iml
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
