@@ -19,17 +19,17 @@ public class TestSimulationController {
     @PostMapping("/simulate")
     public ResponseEntity<String> simulateFailure(
             @RequestParam(defaultValue = "HARD") String type,
-            @RequestParam(required = false) Double amount) {
+            @RequestParam(required = false) Double amount,
+            @RequestParam(defaultValue = "customer@example.com") String email) {
 
         String paymentId = "pay_sim_" + UUID.randomUUID().toString().substring(0, 8);
 
-        // If no amount is provided in query params, pick a realistic random SaaS subscription price
         double finalAmount = (amount != null)
                 ? amount
-                : ThreadLocalRandom.current().nextInt(5, 50) * 100.0 - 1.0; // e.g. ₹499, ₹999, ₹1499, ₹2999...
+                : ThreadLocalRandom.current().nextInt(5, 50) * 100.0 - 1.0;
 
-        triggerMockEvent(paymentId, type, finalAmount);
-        return ResponseEntity.ok("Simulated " + type + " failure event for " + paymentId + " with amount ₹" + finalAmount);
+        triggerMockEvent(paymentId, type, finalAmount, email);
+        return ResponseEntity.ok("Simulated " + type + " failure event for " + paymentId + " with amount ₹" + finalAmount + " targeting " + email);
     }
 
     @PostMapping("/simulate-batch")
@@ -42,15 +42,15 @@ public class TestSimulationController {
         for (int i = 0; i < totalEvents; i++) {
             String paymentId = "pay_batch_" + UUID.randomUUID().toString().substring(0, 8);
             boolean isHard = ThreadLocalRandom.current().nextBoolean();
-            double amount = ThreadLocalRandom.current().nextInt(5, 50) * 100.0; // ₹500 to ₹5000
+            double amount = ThreadLocalRandom.current().nextInt(5, 50) * 100.0;
             totalVolume += amount;
 
             if (isHard) {
                 hardFails++;
-                triggerMockEvent(paymentId, "HARD", amount);
+                triggerMockEvent(paymentId, "HARD", amount, "customer" + i + "@example.com");
             } else {
                 softFails++;
-                triggerMockEvent(paymentId, "SOFT", amount);
+                triggerMockEvent(paymentId, "SOFT", amount, "customer" + i + "@example.com");
             }
         }
 
@@ -67,7 +67,7 @@ public class TestSimulationController {
         return ResponseEntity.ok(summary);
     }
 
-    private void triggerMockEvent(String paymentId, String type, double amount) {
+    private void triggerMockEvent(String paymentId, String type, double amount, String email) {
         String errorCode = "HARD".equalsIgnoreCase(type) ? "BAD_REQUEST_INSUFFICIENT_FUNDS" : "GATEWAY_TIMEOUT_ERROR";
         String reason = "HARD".equalsIgnoreCase(type)
                 ? "Account balance below recurring debit threshold"
@@ -88,13 +88,13 @@ public class TestSimulationController {
                     "status": "failed",
                     "error_code": "%s",
                     "error_reason": "%s",
-                    "email": "customer@example.com",
+                    "email": "%s",
                     "contact": "+919876543210"
                   }
                 }
               }
             }
-            """, paymentId, amountInPaise, errorCode, reason);
+            """, paymentId, amountInPaise, errorCode, reason, email);
 
         dunningService.processWebhookPayloadAsync(mockPayload);
     }

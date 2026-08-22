@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   ShieldAlert, Zap, DollarSign, Clock, RefreshCw, 
-  CheckCircle2, Play, MessageSquare, X, Smartphone 
+  CheckCircle2, Play, MessageSquare, Mail, X, Smartphone 
 } from 'lucide-react';
 
 interface DunningEvent {
@@ -32,7 +32,9 @@ interface BenchmarkReport {
 export default function App() {
   const [events, setEvents] = useState<DunningEvent[]>([]);
   const [loadingSim, setLoadingSim] = useState(false);
+  const [targetEmail, setTargetEmail] = useState('customer@example.com');
   const [activeModalEvent, setActiveModalEvent] = useState<DunningEvent | null>(null);
+  const [previewTab, setPreviewTab] = useState<'whatsapp' | 'email'>('whatsapp');
   const [benchmarkReport, setBenchmarkReport] = useState<BenchmarkReport | null>(null);
 
   useEffect(() => {
@@ -54,7 +56,7 @@ export default function App() {
   const runSimulation = async (type: 'SOFT' | 'HARD') => {
     setLoadingSim(true);
     try {
-      await fetch(`http://localhost:8080/api/v1/test/simulate?type=${type}`, { method: 'POST' });
+      await fetch(`http://localhost:8080/api/v1/test/simulate?type=${type}&email=${encodeURIComponent(targetEmail)}`, { method: 'POST' });
     } finally {
       setLoadingSim(false);
     }
@@ -89,24 +91,31 @@ export default function App() {
           <p className="text-sm text-slate-500 mt-1">Autonomous Failure Classifier, Smart-Dunning & Multi-Channel Escalation</p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2.5">
+          <input
+            type="email"
+            placeholder="Target Test Email"
+            value={targetEmail}
+            onChange={(e) => setTargetEmail(e.target.value)}
+            className="px-3 py-1.5 text-xs border border-slate-300 rounded-lg bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-48 font-mono"
+          />
           <button
             onClick={() => runSimulation('SOFT')}
             disabled={loadingSim}
-            className="flex items-center gap-2 px-3.5 py-2 bg-white hover:bg-slate-50 text-xs font-semibold text-amber-700 border border-amber-300 rounded-lg shadow-sm transition disabled:opacity-50">
+            className="flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 text-xs font-semibold text-amber-700 border border-amber-300 rounded-lg shadow-sm transition disabled:opacity-50">
             <Clock size={14} /> Soft Fail
           </button>
           <button
             onClick={() => runSimulation('HARD')}
             disabled={loadingSim}
-            className="flex items-center gap-2 px-3.5 py-2 bg-white hover:bg-slate-50 text-xs font-semibold text-rose-700 border border-rose-300 rounded-lg shadow-sm transition disabled:opacity-50">
+            className="flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 text-xs font-semibold text-rose-700 border border-rose-300 rounded-lg shadow-sm transition disabled:opacity-50">
             <Zap size={14} /> Hard Fail
           </button>
           <button
             onClick={runBatchBenchmark}
             disabled={loadingSim}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-xs font-semibold text-white rounded-lg shadow-md shadow-blue-500/20 transition disabled:opacity-50">
-            <Play size={14} /> Run 50-Event Batch Benchmark
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-xs font-semibold text-white rounded-lg shadow-md shadow-blue-500/20 transition disabled:opacity-50">
+            <Play size={14} /> Run 50-Event Batch
           </button>
         </div>
       </header>
@@ -181,7 +190,10 @@ export default function App() {
             events.map((ev, index) => (
               <div key={index} className="p-4 bg-slate-50 border border-slate-200 rounded-lg flex flex-col gap-2.5 transition hover:border-slate-300">
                 <div className="flex justify-between items-center text-xs">
-                  <span className="font-mono text-blue-700 font-bold">{ev.paymentId}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-blue-700 font-bold">{ev.paymentId}</span>
+                    <span className="text-slate-500 text-[11px] font-mono">({ev.customerEmail})</span>
+                  </div>
                   <span className="text-slate-400">{new Date(ev.createdAt || Date.now()).toLocaleTimeString()}</span>
                 </div>
 
@@ -205,19 +217,31 @@ export default function App() {
                 </div>
 
                 {ev.recoveryUrl && (
-                  <div className="flex items-center justify-between bg-emerald-50 border border-emerald-200 p-2.5 rounded text-xs text-emerald-900">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between bg-emerald-50 border border-emerald-200 p-2.5 rounded text-xs text-emerald-900 gap-2">
                     <div className="flex items-center gap-2 font-mono truncate">
                       <CheckCircle2 size={15} className="text-emerald-600 shrink-0" />
-                      <span className="hidden sm:inline font-semibold">1-Click Link:</span>
+                      <span className="font-semibold">Razorpay Link:</span>
                       <a href={ev.recoveryUrl} target="_blank" rel="noreferrer" className="underline text-emerald-700 hover:text-emerald-800 font-semibold truncate max-w-xs">
                         {ev.recoveryUrl}
                       </a>
                     </div>
-                    <button
-                      onClick={() => setActiveModalEvent(ev)}
-                      className="text-[10px] uppercase font-bold tracking-wider bg-emerald-600 hover:bg-emerald-700 px-2.5 py-1 rounded text-white flex items-center gap-1 shrink-0 transition shadow-sm">
-                      <MessageSquare size={12} /> WhatsApp Preview
-                    </button>
+                    
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <span className="bg-emerald-100 text-emerald-800 font-medium px-2 py-0.5 rounded text-[10px] flex items-center gap-1 border border-emerald-300">
+                        <Mail size={10} /> Email Sent
+                      </span>
+                      <span className="bg-emerald-100 text-emerald-800 font-medium px-2 py-0.5 rounded text-[10px] flex items-center gap-1 border border-emerald-300">
+                        <MessageSquare size={10} /> WA Dispatched
+                      </span>
+                      <button
+                        onClick={() => {
+                          setActiveModalEvent(ev);
+                          setPreviewTab('whatsapp');
+                        }}
+                        className="text-[10px] uppercase font-bold tracking-wider bg-emerald-600 hover:bg-emerald-700 px-2.5 py-1 rounded text-white flex items-center gap-1 transition shadow-sm ml-1">
+                        Preview
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
@@ -226,14 +250,26 @@ export default function App() {
         </div>
       </div>
 
-      {/* WhatsApp Modal with Authentic Styling */}
+      {/* Multi-Channel Preview Modal */}
       {activeModalEvent && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in">
-          <div className="bg-white border border-slate-200 rounded-2xl max-w-sm w-full p-5 shadow-2xl relative">
-            <div className="flex justify-between items-center pb-3 border-b border-slate-100 mb-4">
-              <div className="flex items-center gap-2 text-emerald-700 font-semibold text-sm">
-                <Smartphone size={18} />
-                <span>Customer WhatsApp View</span>
+          <div className="bg-white border border-slate-200 rounded-2xl max-w-md w-full p-5 shadow-2xl relative">
+            <div className="flex justify-between items-center pb-3 border-b border-slate-100 mb-3">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setPreviewTab('whatsapp')}
+                  className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-lg transition ${
+                    previewTab === 'whatsapp' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'text-slate-500 hover:text-slate-800'
+                  }`}>
+                  <Smartphone size={14} /> WhatsApp
+                </button>
+                <button
+                  onClick={() => setPreviewTab('email')}
+                  className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-lg transition ${
+                    previewTab === 'email' ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'text-slate-500 hover:text-slate-800'
+                  }`}>
+                  <Mail size={14} /> Email Card
+                </button>
               </div>
               <button 
                 onClick={() => setActiveModalEvent(null)}
@@ -242,28 +278,52 @@ export default function App() {
               </button>
             </div>
 
-            {/* Chat bubble */}
-            <div className="bg-[#efeae2] p-4 rounded-xl border border-slate-200 font-sans space-y-2.5 text-xs text-slate-800">
-              <div className="bg-[#d9fdd3] p-3.5 rounded-lg rounded-tl-none shadow-sm text-slate-900 space-y-2 border border-[#c3f4bb]">
-                <p className="font-bold text-[#008069]">Payment Reminder • Razorpay</p>
-                <p>
-                  Hi there, your payment of <strong className="text-slate-950">₹{activeModalEvent.amount}</strong> for Invoice <span className="font-mono">#{activeModalEvent.paymentId.substring(4, 10)}</span> could not be processed automatically.
-                </p>
-                <p className="text-slate-700">
-                  Tap below to complete your payment with UPI, Card, or Netbanking in 1 click:
-                </p>
-                <a
-                  href={activeModalEvent.recoveryUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="block bg-[#008069] text-white font-bold text-center py-2 rounded-md hover:bg-[#00705c] transition mt-2 shadow-sm">
-                  Complete Payment Now →
-                </a>
+            {previewTab === 'whatsapp' ? (
+              <div className="bg-[#efeae2] p-4 rounded-xl border border-slate-200 font-sans space-y-2.5 text-xs text-slate-800">
+                <div className="bg-[#d9fdd3] p-3.5 rounded-lg rounded-tl-none shadow-sm text-slate-900 space-y-2 border border-[#c3f4bb]">
+                  <p className="font-bold text-[#008069]">Payment Reminder • Razorpay</p>
+                  <p>
+                    Hi there, your payment of <strong className="text-slate-950">₹{activeModalEvent.amount}</strong> for Invoice <span className="font-mono">#{activeModalEvent.paymentId.substring(4, 10)}</span> could not be processed automatically.
+                  </p>
+                  <p className="text-slate-700">
+                    Tap below to complete your payment with UPI, Card, or Netbanking in 1 click:
+                  </p>
+                  <a
+                    href={activeModalEvent.recoveryUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="block bg-[#008069] text-white font-bold text-center py-2 rounded-md hover:bg-[#00705c] transition mt-2 shadow-sm">
+                    Complete Payment Now →
+                  </a>
+                </div>
+                <span className="text-[10px] text-slate-500 block text-right">
+                  {new Date(activeModalEvent.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • Delivered
+                </span>
               </div>
-              <span className="text-[10px] text-slate-500 block text-right">
-                {new Date(activeModalEvent.createdAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • Delivered
-              </span>
-            </div>
+            ) : (
+              <div className="border border-slate-200 rounded-xl p-4 bg-white space-y-3 text-xs">
+                <div className="border-b border-slate-100 pb-2">
+                  <span className="text-slate-400">To: </span>
+                  <span className="font-semibold text-slate-800">{activeModalEvent.customerEmail}</span>
+                  <br />
+                  <span className="text-slate-400">Subject: </span>
+                  <span className="font-medium text-slate-900">Action Required: Complete your subscription renewal</span>
+                </div>
+                <div className="py-2 text-slate-700 space-y-2">
+                  <p>Hi Valued Customer,</p>
+                  <p>We were unable to process your scheduled subscription payment of <strong>₹{activeModalEvent.amount}</strong> due to: <span className="text-rose-600">{activeModalEvent.errorReason}</span>.</p>
+                  <div className="py-2 text-center">
+                    <a
+                      href={activeModalEvent.recoveryUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-block bg-blue-600 text-white font-bold px-4 py-2 rounded-md hover:bg-blue-700 transition">
+                      Complete Payment Securely
+                    </a>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

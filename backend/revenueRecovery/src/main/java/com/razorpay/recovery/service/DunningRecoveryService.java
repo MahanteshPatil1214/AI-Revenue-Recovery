@@ -1,6 +1,5 @@
 package com.razorpay.recovery.service;
 
-
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.razorpay.PaymentLink;
@@ -15,6 +14,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -27,6 +27,7 @@ public class DunningRecoveryService {
     private final ObjectMapper mapper = new ObjectMapper();
     private final SseStreamService sseStreamService;
     private final DunningEventRepository eventRepository;
+    private final NotificationService notificationService;
 
     private final Map<String, Boolean> activeLocks = new ConcurrentHashMap<>();
 
@@ -86,6 +87,25 @@ public class DunningRecoveryService {
                 // Hard failure -> Escalate to dynamic 1-click Payment Link
                 String recoveryUrl = generatePaymentLink(payment.path("amount").asLong(), contact, email, paymentId);
 
+                // 3. Autonomous Multi-Channel Escalation (Email + SMS/WhatsApp)
+                notificationService.sendEmailRecovery(
+                        "Valued Customer",
+                        email,
+                        BigDecimal.valueOf(amount),
+                        "INR",
+                        recoveryUrl,
+                        errorReason
+                );
+
+                notificationService.sendSmsOrWhatsAppRecovery(
+                        "Valued Customer",
+                        contact,
+                        BigDecimal.valueOf(amount),
+                        "INR",
+                        recoveryUrl,
+                        errorReason
+                );
+
                 record = DunningEvent.builder()
                         .paymentId(paymentId)
                         .amount(amount)
@@ -95,7 +115,7 @@ public class DunningRecoveryService {
                         .errorReason(errorReason)
                         .category(FailureCategory.PERMANENT_HARD_FAIL)
                         .strategyApplied("AUTONOMOUS_PAYMENT_LINK_ESCALATION")
-                        .reasoningTrace("Permanent failure (" + errorReason + "). Generated dynamic Razorpay UPI link and dispatched mock WhatsApp trigger.")
+                        .reasoningTrace("Permanent failure (" + errorReason + "). Generated dynamic Razorpay link & dispatched automated email/SMS recovery.")
                         .recoveryUrl(recoveryUrl)
                         .status("RECOVERED_ACTION_TAKEN")
                         .createdAt(Instant.now())
