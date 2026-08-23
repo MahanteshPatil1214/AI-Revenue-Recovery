@@ -121,7 +121,7 @@ public class DunningRecoveryService {
                         .errorReason(errorReason)
                         .category(FailureCategory.PERMANENT_HARD_FAIL)
                         .strategyApplied("AUTONOMOUS_PAYMENT_LINK_ESCALATION")
-                        .reasoningTrace("Permanent failure (" + errorReason + "). Generated dynamic Razorpay link & dispatched automated email/SMS recovery.")
+                        .reasoningTrace("Permanent failure (" + errorReason + "). Generated dynamic Razorpay link & dispatched automated email.")
                         .recoveryUrl(recoveryUrl)
                         .status("RECOVERED_ACTION_TAKEN")
                         .createdAt(Instant.now())

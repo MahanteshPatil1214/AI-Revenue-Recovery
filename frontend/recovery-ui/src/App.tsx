@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Header } from './components/Header';
 import { BenchmarkBanner } from './components/BenchmarkBanner';
 import { KpiGrid } from './components/KpiGrid';
+import { AnalyticsPanel } from './components/AnalyticsPanel';
 import { EventList } from './components/EventList';
 import { NotificationPreviewModal } from './components/NotificationPreviewModal';
 import type { DunningEvent, BenchmarkReport } from './types/recovery';
@@ -55,9 +56,11 @@ export default function App() {
   };
 
   const totalFailed = events.length;
-  const totalRecoveredCount = events.filter((e) => e.status === 'RECOVERED_ACTION_TAKEN').length;
+  const totalRecoveredCount = events.filter(
+    (e) => e.status === 'RECOVERED_ACTION_TAKEN' || e.status === 'RECOVERED_RETRY_SUCCESS'
+  ).length;
   const totalRevenueSalvaged = events
-    .filter((e) => e.status === 'RECOVERED_ACTION_TAKEN')
+    .filter((e) => e.status === 'RECOVERED_ACTION_TAKEN' || e.status === 'RECOVERED_RETRY_SUCCESS')
     .reduce((acc, curr) => acc + (curr.amount || 0), 0);
 
   return (
@@ -80,6 +83,9 @@ export default function App() {
         totalRecoveredCount={totalRecoveredCount}
         totalRevenueSalvaged={totalRevenueSalvaged}
       />
+
+      {/* Live Analytics & Financial Audit Export */}
+      <AnalyticsPanel events={events} />
 
       <EventList
         events={events}
