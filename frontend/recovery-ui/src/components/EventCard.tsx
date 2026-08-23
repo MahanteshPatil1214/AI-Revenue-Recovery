@@ -1,5 +1,5 @@
 import React from 'react';
-import { CheckCircle2, Mail } from 'lucide-react';
+import { CheckCircle2, Mail, RefreshCw, Clock } from 'lucide-react';
 import type { DunningEvent } from '../types/recovery';
 
 interface EventCardProps {
@@ -8,6 +8,9 @@ interface EventCardProps {
 }
 
 export const EventCard: React.FC<EventCardProps> = ({ event, onPreview }) => {
+  const isSoftScheduled = event.status === 'SCHEDULED' && event.category === 'TRANSIENT_SOFT_FAIL';
+  const isRetryRecovered = event.status === 'RECOVERED_RETRY_SUCCESS';
+
   return (
     <div className="p-4 bg-slate-50 border border-slate-200 rounded-lg flex flex-col gap-2.5 transition hover:border-slate-300">
       <div className="flex justify-between items-center text-xs">
@@ -31,6 +34,15 @@ export const EventCard: React.FC<EventCardProps> = ({ event, onPreview }) => {
           {event.errorCode}
         </span>
         <span className="text-sm font-semibold text-slate-800">₹{event.amount}</span>
+
+        {/* Retry Badge Indicator */}
+        {(event.retryCount ?? 0) > 0 && (
+          <span className="text-[11px] font-bold bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded flex items-center gap-1">
+            <RefreshCw size={11} className={isSoftScheduled ? "animate-spin" : ""} />
+            Attempt {event.retryCount}/{event.maxRetries || 3}
+          </span>
+        )}
+
         <span className="text-xs text-slate-600 ml-auto font-mono bg-white px-2 py-0.5 rounded border border-slate-200 shadow-sm">
           {event.strategyApplied}
         </span>
@@ -41,6 +53,15 @@ export const EventCard: React.FC<EventCardProps> = ({ event, onPreview }) => {
         {event.reasoningTrace}
       </div>
 
+      {/* Auto Recovered Success Box */}
+      {isRetryRecovered && (
+        <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 p-2.5 rounded text-xs text-emerald-900">
+          <CheckCircle2 size={16} className="text-emerald-600" />
+          <span className="font-semibold">Successfully Recovered via Smart Retry Pipeline</span>
+        </div>
+      )}
+
+      {/* Hard Failure Escalation Box */}
       {event.recoveryUrl && (
         <div className="flex flex-col sm:flex-row sm:items-center justify-between bg-emerald-50 border border-emerald-200 p-2.5 rounded text-xs text-emerald-900 gap-2">
           <div className="flex items-center gap-2 font-mono truncate">

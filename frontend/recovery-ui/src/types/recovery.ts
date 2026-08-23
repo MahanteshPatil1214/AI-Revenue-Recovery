@@ -11,6 +11,9 @@ export interface DunningEvent {
   reasoningTrace: string;
   recoveryUrl?: string;
   status: string;
+  retryCount?: number;
+  maxRetries?: number;
+  nextRetryAt?: string;
   createdAt: string;
 }
 

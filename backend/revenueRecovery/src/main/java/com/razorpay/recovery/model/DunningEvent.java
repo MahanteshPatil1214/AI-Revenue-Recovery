@@ -2,10 +2,14 @@ package com.razorpay.recovery.model;
 
 import jakarta.persistence.*;
 import lombok.*;
+
 import java.time.Instant;
 
 @Entity
-@Table(name = "dunning_events")
+@Table(name = "dunning_events", indexes = {
+        @Index(name = "idx_dunning_payment_id", columnList = "paymentId"),
+        @Index(name = "idx_dunning_status_retry", columnList = "status, nextRetryAt")
+})
 @Getter
 @Setter
 @NoArgsConstructor
@@ -35,6 +39,17 @@ public class DunningEvent {
     private String reasoningTrace;
 
     private String recoveryUrl;
-    private String status; // SCHEDULED, RECOVERED_ACTION_TAKEN, RESOLVED
+
+    // Statuses: SCHEDULED, RETRYING, RECOVERED_RETRY_SUCCESS, RECOVERED_ACTION_TAKEN, EXHAUSTED_ESCALATED
+    private String status;
+
+    @Builder.Default
+    private Integer retryCount = 0;
+
+    @Builder.Default
+    private Integer maxRetries = 3;
+
+    private Instant nextRetryAt;
+
     private Instant createdAt;
 }

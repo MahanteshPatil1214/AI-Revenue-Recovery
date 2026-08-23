@@ -70,6 +70,9 @@ public class DunningRecoveryService {
             DunningEvent record;
 
             if (isTransient) {
+                // Soft failure -> Schedule first smart retry in 15 seconds
+                Instant firstRetryWindow = Instant.now().plusSeconds(15);
+
                 record = DunningEvent.builder()
                         .paymentId(paymentId)
                         .amount(amount)
@@ -79,8 +82,11 @@ public class DunningRecoveryService {
                         .errorReason(errorReason)
                         .category(FailureCategory.TRANSIENT_SOFT_FAIL)
                         .strategyApplied("SMART_BACKOFF_RETRY")
-                        .reasoningTrace("Transient network/bank glitch detected (" + errorCode + "). Scheduled auto-retry with exponential backoff in 15m.")
+                        .reasoningTrace("Transient network/bank glitch detected (" + errorCode + "). Queued retry #1 with backoff in 15s.")
                         .status("SCHEDULED")
+                        .retryCount(0)
+                        .maxRetries(3)
+                        .nextRetryAt(firstRetryWindow)
                         .createdAt(Instant.now())
                         .build();
             } else {
