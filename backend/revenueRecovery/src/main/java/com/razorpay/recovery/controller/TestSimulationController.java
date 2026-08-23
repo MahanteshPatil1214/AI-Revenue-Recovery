@@ -1,6 +1,7 @@
 package com.razorpay.recovery.controller;
 
 import com.razorpay.recovery.service.DunningRecoveryService;
+import com.razorpay.recovery.service.WebhookDlqService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -13,6 +14,8 @@ import java.util.concurrent.ThreadLocalRandom;
 @RequiredArgsConstructor
 @CrossOrigin(origins = "*")
 public class TestSimulationController {
+
+    private final WebhookDlqService webhookDlqService;
 
     private final DunningRecoveryService dunningService;
 
@@ -106,5 +109,16 @@ public class TestSimulationController {
     ) {
         dunningService.processPaymentCaptured(paymentId, "1000", method);
         return ResponseEntity.ok("Simulated payment capture processed for: " + paymentId);
+    }
+
+    @PostMapping("/simulate-dlq")
+    public ResponseEntity<String> simulateDlq() {
+        String badPayload = "{\"event\": \"payment.failed\", \"corrupted_data\": true}";
+        webhookDlqService.captureFailedWebhook(
+                "payment.failed",
+                badPayload,
+                new RuntimeException("Simulated JSON structure parsing error")
+        );
+        return ResponseEntity.ok("Successfully captured test exception into DLQ registry");
     }
 }

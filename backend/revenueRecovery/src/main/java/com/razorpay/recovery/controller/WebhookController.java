@@ -1,7 +1,7 @@
 package com.razorpay.recovery.controller;
 
 import com.razorpay.recovery.service.DunningRecoveryService;
-
+import com.razorpay.recovery.service.WebhookDlqService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.json.JSONObject;
@@ -19,6 +19,7 @@ public class WebhookController {
 
     private final DunningRecoveryService dunningRecoveryService;
     private final SignatureVerifier signatureVerifier;
+    private final WebhookDlqService webhookDlqService;
 
     @Value("${razorpay.webhook.secret:}")
     private String webhookSecret;
@@ -30,7 +31,7 @@ public class WebhookController {
     ) {
         log.info("Received Razorpay webhook dispatch.");
 
-        // Verify HMAC-SHA256 signature if secret is configured
+        // 1. Verify HMAC-SHA256 signature if secret is configured
         if (webhookSecret != null && !webhookSecret.isBlank() && !webhookSecret.equalsIgnoreCase("dummy_secret")) {
             if (signature == null || !signatureVerifier.verifyWebhookSignature(payload, signature, webhookSecret)) {
                 log.error("Webhook HMAC signature validation failed!");
@@ -38,13 +39,15 @@ public class WebhookController {
             }
         }
 
+        String eventType = "UNKNOWN";
+
         try {
             JSONObject json = new JSONObject(payload);
-            String event = json.optString("event");
+            eventType = json.optString("event", "UNKNOWN");
 
-            if ("payment.failed".equalsIgnoreCase(event)) {
+            if ("payment.failed".equalsIgnoreCase(eventType)) {
                 dunningRecoveryService.processWebhookPayloadAsync(payload);
-            } else if ("payment.captured".equalsIgnoreCase(event) || "payment_link.paid".equalsIgnoreCase(event)) {
+            } else if ("payment.captured".equalsIgnoreCase(eventType) || "payment_link.paid".equalsIgnoreCase(eventType)) {
                 JSONObject payloadObj = json.optJSONObject("payload");
                 if (payloadObj != null) {
                     JSONObject paymentObj = payloadObj.optJSONObject("payment");
@@ -58,13 +61,15 @@ public class WebhookController {
                     }
                 }
             } else {
-                log.info("Unhandled webhook event type: {}", event);
+                log.info("Unhandled webhook event type: {}", eventType);
             }
 
             return ResponseEntity.ok("Event processed successfully");
         } catch (Exception e) {
-            log.error("Error processing webhook payload: {}", e.getMessage(), e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Processing failed");
+            log.error("Exception in webhook pipeline. Capturing payload to Dead-Letter Queue (DLQ): {}", e.getMessage(), e);
+            webhookDlqService.captureFailedWebhook(eventType, payload, e);
+            // Return 200/202 to Razorpay gateway to avoid unnecessary gateway flood while DLQ handles retries internally
+            return ResponseEntity.status(HttpStatus.ACCEPTED).body("Payload queued in Dead-Letter Queue for retry");
         }
     }
 }
