@@ -1,47 +1,454 @@
 # AI Revenue Recovery — Autonomous Smart Dunning Engine
 
-A production-grade **Autonomous Revenue Recovery & Smart Dunning Engine** for recurring SaaS payment failures, built with **Java 21 (Spring Boot 3)**, **React 18 + Tailwind CSS**, and **Razorpay APIs**.
+A production-style **Autonomous Revenue Recovery & Smart Dunning Engine** for recurring SaaS payment failures, built with **Java 21 (Spring Boot 3)**, **React + TypeScript + Vite + Tailwind CSS**, **PostgreSQL**, and the **Razorpay** platform (Webhooks + Payment Links).
 
-## What it does
+---
+
+## Table of Contents
+
+- [What It Does](#what-it-does)
+- [Architecture](#architecture)
+- [Failure Classification](#failure-classification)
+- [Recovery Strategies](#recovery-strategies)
+- [Lifecycle & State Machine](#lifecycle--state-machine)
+- [Resilience Features](#resilience-features)
+- [Tech Stack](#tech-stack)
+- [Repository Layout](#repository-layout)
+- [Backend Reference](#backend-reference)
+  - [REST API](#rest-api)
+  - [Scheduled Jobs & Async Pipeline](#scheduled-jobs--async-pipeline)
+  - [Data Model](#data-model)
+  - [Configuration](#configuration)
+- [Frontend Reference](#frontend-reference)
+- [Getting Started](#getting-started)
+- [Demo Walkthrough](#demo-walkthrough)
+- [Project Status](#project-status)
+- [Known Limitations](#known-limitations)
+
+---
+
+## What It Does
 
 When a recurring subscription payment fails, the engine autonomously decides how to recover the revenue:
 
-1. **Ingests** Razorpay webhooks (`payment.failed`, etc.) with strict HMAC-SHA256 signature verification.
-2. **Classifies** the failure code into soft/transient vs. hard/permanent categories.
+1. **Ingests** Razorpay webhooks (`payment.failed`, `payment.captured`, `payment_link.paid`) over HTTP with strict **HMAC-SHA256 signature verification** (constant-time comparison).
+2. **Classifies** the failure code into *soft/transient* vs. *hard/permanent* categories.
 3. **Recovers** via two deterministic strategies:
-   - **Soft errors** (`GATEWAY_ERROR`, `BANK_DOWNTIME`, `NETWORK_TIMEOUT`) → bounded exponential-backoff retry scheduler (max 3 retries / 48h, jittered).
-   - **Hard errors** (`EXPIRED_CARD`, `INSUFFICIENT_FUNDS`, `AUTHENTICATION_FAILED`) → autonomous escalation to Razorpay Payment Links (UPI intent supported) + multi-channel dunning notifications.
-4. **Guards** every path with idempotency controls, a deterministic Finite State Machine, circuit breakers, and dead-letter handling.
+   - **Soft errors** (`GATEWAY_*`, `*_TIMEOUT`, `SERVER_ERROR`, `BANK_DOWNTIME`) → bounded exponential-backoff retry scheduler (**max 3 retries**, 15s → 30s → 60s with 0–5 s jitter).
+   - **Hard errors** (`INSUFFICIENT_FUNDS`, `EXPIRED_CARD`, `AUTHENTICATION_FAILED`, …) → autonomous escalation to a **Razorpay Payment Link** (UPI/Cards/Netbanking supported) + multi-channel dunning notifications (HTML email + SMS/WhatsApp).
+4. **Settles** recovered revenue by listening for `payment.captured` / `payment_link.paid` webhooks or a customer one-click checkout resolution, then marks the event `RECOVERED_CUSTOMER_PAID`.
+5. **Guards** every path with two-tier idempotency, a deterministic event lifecycle, a **dead-letter queue (DLQ)** with automated backoff reprocessing, and real-time **Server-Sent Events (SSE)** streaming to an operations dashboard.
+
+---
 
 ## Architecture
 
 ```
-Razorpay ──webhook──▶ WebhookController ──▶ IdempotencyGate ──▶ @Async pipeline
-                        (HMAC-SHA256)                              │
-                                                                   ▼
-                                                    FailureClassifier (soft/hard)
-                                                     │                    │
-                                            BackoffScheduler        EscalationService
-                                            (bounded retries)       (Payment Link + notify)
-                                                     │                    │
-                                                     ▼                    ▼
-                                        RecoveryStateMachine (FAILED → SCHEDULED_FOR_RETRY |
-                                              ESCALATED_TO_LINK → RESOLVED | CANCELLED_DEAD_LETTER)
-                                                                   │
-                                                     SseStreamService ──SSE──▶ React Dashboard
+                         Razorpay Platform
+                    ┌────────┴──────────┐
+             webhook │                   │ REST (Payment Links API)
+                     ▼                   ▼
+        WebhookController          DunningRecoveryService
+        (HMAC-SHA256 verify)       generatePaymentLink()
+                     │                   ▲
+                     ▼                   │ link URL
+              IdempotencyGate ───────────┘
+        (in-memory lock + DB unique check)
+                     │  @Async pipeline
+                     ▼
+            FailureClassifier
+         (soft vs. hard error codes)
+             │                       │
+             ▼                       ▼
+     SmartRetryScheduler      Escalation path
+     (@Scheduled poll, 10s)   Payment Link + Email/SMS notify
+     backoff 15/30/60s+jitter        │
+             │                       │
+             ▼                       ▼
+        PostgreSQL (dunning_events)  NotificationService
+             │                       (HTML email · SMS/WhatsApp sim)
+             └───────────┬─────────────┘
+                         ▼
+               SseStreamService ──SSE ("recovery-event")──▶ React Dashboard
+                                                          (KPIs · analytics · audit)
+
+  Failure branch: any exception ──▶ WebhookDlqService ──▶ webhook_dlq_events
+                                    (@Scheduled reprocessor, 20s,
+                                     backoff 60s/120s, max 3 → DEAD_LETTER)
 ```
 
-## Repository layout
+---
+
+## Failure Classification
+
+The classifier inspects Razorpay's `error_code` field on `payment.failed` payloads:
+
+| Category | Matching error codes | Meaning | Strategy |
+|---|---|---|---|
+| `TRANSIENT_SOFT_FAIL` | code contains `GATEWAY`, `TIMEOUT`, `SERVER_ERROR`, `BANK_DOWNTIME` | Transient infrastructure/bank issues — worth retrying | `SMART_BACKOFF_RETRY` |
+| `PERMANENT_HARD_FAIL` | Everything else (e.g., `BAD_REQUEST_INSUFFICIENT_FUNDS`, `CARD_EXPIRED`, `AUTHENTICATION_FAILED`) | Customer-side issues — retrying won't help without intervention | `AUTONOMOUS_PAYMENT_LINK_ESCALATION` |
+
+Unknown codes default to `UNKNOWN_ERROR` and are treated as **hard failures** (fail-safe toward customer outreach rather than silent retries).
+
+## Recovery Strategies
+
+### 1. Smart Backoff Retry (soft failures)
+
+- Event enters `SCHEDULED` status with `retryCount=0`, `maxRetries=3`, first attempt at **+15 seconds**.
+- A scheduled poller executes due retries every 10 seconds.
+- Backoff schedule per attempt: `15 × 2^(attempt−1)` seconds **+ 0–5 s random jitter** → **≈15s, ≈30s, ≈60s**.
+- On success (simulated at ~70% in demo mode): status → `RECOVERED_RETRY_SUCCESS`.
+- After exhausting 3 attempts: autonomous escalation — category flips to `PERMANENT_HARD_FAIL`, strategy becomes `EXHAUSTED_ESCALATED_LINK_DISPATCH`, a payment link is generated and dunning email dispatched.
+
+### 2. Autonomous Payment Link Escalation (hard failures)
+
+Fires immediately on classification — no waiting:
+
+- Creates a Razorpay **Payment Link** via the official Java SDK (`razorpay.paymentLink.create`):
+  - Amount in paise, currency `INR`, `accept_partial=false`
+  - Customer name/contact/email attached
+  - `notify: { sms: true, email: true }`, auto-reminders enabled
+  - Description: `Payment Recovery for Inv #<paymentId>`
+- Stores the resulting `short_url` in `recoveryUrl`.
+- Dispatches a styled **HTML dunning email** (subject: *"Action Required: Complete your subscription renewal"*) with a secure CTA button, plus an SMS/WhatsApp notification (currently log-simulated).
+- If the Razorpay call fails, a synthetic fallback link is generated so demos keep working end-to-end.
+
+### Settlement paths
+
+A `RECOVERED_ACTION_TAKEN` (or retried) event reaches a terminal paid state via:
+
+1. Razorpay sends `payment.captured` or `payment_link.paid` → engine matches `paymentId`, marks `RECOVERED_CUSTOMER_PAID` (strategy `WEBHOOK_PAYMENT_CAPTURED_SETTLED`), clears pending retries.
+2. Customer completes payment in the built-in checkout portal → `POST /api/v1/customer/resolve/{paymentId}` → same terminal state (strategy `CUSTOMER_1CLICK_CHECKOUT_SUCCESS`).
+
+Every transition is persisted and broadcast live over SSE.
+
+---
+
+## Lifecycle & State Machine
 
 ```
-backend/    Spring Boot service (webhooks, FSM, scheduler, Razorpay integration, SSE)
-frontend/   React + Tailwind real-time monitoring console (KPIs, audit trail, simulators)
-ARCHITECTURE_INCIDENTS.md   Incident/consequence matrix & engineering mitigations
+                 payment.failed webhook (async pipeline)
+                                 │
+        ┌────────── SOFT ────────┴──────── HARD ──────────┐
+        ▼                                                 ▼
+    SCHEDULED ◄─── reschedule                        RECOVERED_ACTION_TAKEN
+        │            (nextRetryAt =                  (link + email + SMS sent)
+        │             now + 15·2^(n−1)s + jitter)           │
+        ├── attempt succeeds ──► RECOVERED_RETRY_SUCCESS    │
+        │                        (terminal)                 │
+        ├── attempt fails, n < 3 ──► stays SCHEDULED        │
+        ├── attempts exhausted ──► PERMANENT_HARD_FAIL      │
+        │       + RECOVERED_ACTION_TAKEN (escalated link)   │
+        │                                                   │
+        └─────────── any state ─── payment.captured /  ─────┤
+                    with recoveryUrl   payment_link.paid    │
+                                       customer resolve     ▼
+                                              RECOVERED_CUSTOMER_PAID (terminal)
+
+Dead-letter queue (separate lifecycle for undeliverable webhooks):
+
+    RETRY_PENDING ──(reprocess OK)──► RESOLVED
+         │
+         └──(3 failed attempts)──► DEAD_LETTER  (parked for engineering inspection)
 ```
 
-## Status
+Terminal dunning states: `RECOVERED_RETRY_SUCCESS`, `RECOVERED_ACTION_TAKEN`, `RECOVERED_CUSTOMER_PAID`.
+
+## Resilience Features
+
+| Mechanism | Implementation |
+|---|---|
+| **Webhook signature verification** | HMAC-SHA256 over the raw payload using `Razorpay-Webhook-Secret`; digest compared to the `X-Razorpay-Signature` header via constant-time `MessageDigest.isEqual`. Invalid/missing signatures → `401 Unauthorized`. |
+| **Idempotency (two tiers)** | ① Per-JVM `ConcurrentHashMap.putIfAbsent(paymentId)` blocks concurrent async duplicates; ② `existsByPaymentId` DB check backed by a UNIQUE column drops redelivered events. |
+| **Dead-Letter Queue** | Any exception during webhook processing is captured to `webhook_dlq_events` (`RETRY_PENDING`). A 20-second reprocessor replays them with exponential backoff (30s initial → 60s → 120s); after 3 failed attempts the payload parks in `DEAD_LETTER` for inspection. The ingest endpoint returns `202 Accepted` (not an error) so Razorpay doesn't re-flood while the DLQ owns the retry. |
+| **Bounded retries** | Both the dunning retry loop (max 3) and the DLQ reprocessor (max 3) are strictly bounded — no infinite loops. |
+| **Async offloading** | Webhook parsing/classification and all notifications run via `@Async`, keeping HTTP threads free. |
+| **Non-blocking notifications** | Mail sender is injected optionally (`@Autowired(required=false)`) — the app boots cleanly even with mail disabled/misconfigured. |
+| **Graceful degradation** | Payment-link creation falls back to a synthetic URL when Razorpay credentials are absent, keeping the full pipeline demonstrable offline. |
+
+---
+
+## Tech Stack
+
+**Backend**
+
+| Layer | Technology |
+|---|---|
+| Runtime | Java 21 |
+| Framework | Spring Boot 3.2.5 (Web, Data JPA, Mail) |
+| Database | PostgreSQL (+ Hibernate `ddl-auto=update`; Flyway migration script included but currently disabled) |
+| Payments | Razorpay Java SDK 1.4.6 (Payment Links API) |
+| Config secrets | dotenv-java 3.0.0 (loads `.env` at startup) |
+| Boilerplate | Lombok |
+| Realtime | Spring SSE (`SseEmitter`) |
+
+**Frontend**
+
+| Layer | Technology |
+|---|---|
+| Framework | React 19 + TypeScript (Vite 8) |
+| Styling | Tailwind CSS v4 (CSS-first config via `@tailwindcss/vite`) |
+| Icons | lucide-react |
+| Realtime | Native `EventSource` (SSE) |
+
+> Note: `package.json` declares older React/Vite/Tailwind versions than what the lockfile installs; the installed set (React 19 / Vite 8 / Tailwind 4) is what actually runs.
+
+---
+
+## Repository Layout
+
+```
+revenue recovery/
+├── backend/
+│   └── revenueRecovery/                # Spring Boot service
+│       ├── pom.xml
+│       └── src/
+│           ├── main/java/com/razorpay/recovery/
+│           │   ├── RecoveryApplication.java        # @EnableScheduling + @EnableAsync entrypoint (.env loader)
+│           │   ├── config/CorsConfig.java          # CORS for :5173 and :3000
+│           │   ├── controller/
+│           │   │   ├── WebhookController.java      # Razorpay webhook ingress + HMAC gate
+│           │   │   ├── SignatureVerifier.java      # HMAC-SHA256, constant-time compare
+│           │   │   ├── SseController.java          # Live stream + history endpoints
+│           │   │   ├── CustomerRecoveryController.java  # Invoice lookup + 1-click resolve
+│           │   │   └── TestSimulationController.java    # Demo/benchmark harness
+│           │   ├── model/
+│           │   │   ├── DunningEvent.java           # Core JPA entity (dunning_events)
+│           │   │   ├── WebhookDlqEvent.java        # DLQ entity (webhook_dlq_events)
+│           │   │   └── FailureCategory.java        # TRANSIENT_SOFT_FAIL | PERMANENT_HARD_FAIL
+│           │   ├── repository/
+│           │   │   ├── DunningEventRepository.java # incl. findPendingRetriesReady query
+│           │   │   └── WebhookDlqRepository.java
+│           │   └── service/
+│           │       ├── DunningRecoveryService.java # Core async pipeline + Payment Links
+│           │       ├── SmartRetryScheduler.java    # Backoff retry poller
+│           │       ├── WebhookDlqService.java      # DLQ capture + automated reprocessor
+│           │       ├── SseStreamService.java       # Broadcaster registry
+│           │       ├── NotificationService(+Impl).java  # HTML email + SMS/WhatsApp dispatch
+│           └── main/resources/
+│               ├── application.properties
+│               └── db/migrations/V1__init_recovery_events_schema.sql
+├── frontend/
+│   └── recovery-ui/                    # React ops dashboard
+│       └── src/
+│           ├── App.tsx                 # Root page: history fetch + SSE subscription + upsert logic
+│           ├── components/
+│           │   ├── Header.tsx                    # Title bar + soft/hard/batch simulators
+│           │   ├── KpiGrid.tsx                   # Failed payments · interventions · salvaged ₹
+│           │   ├── AnalyticsPanel.tsx            # Recovery %, cohort bars, top triggers, CSV export
+│           │   ├── EventList.tsx / EventCard.tsx # Live feed w/ Agent Trace + retry badges
+│           │   ├── BenchmarkBanner.tsx           # Batch benchmark summary
+│           │   ├── NotificationPreviewModal.tsx  # Dunning email preview
+│           │   └── CustomerPaymentPortal.tsx     # Simulated Razorpay checkout (UPI/Card/Netbanking)
+│           └── types/recovery.ts       # DunningEvent + BenchmarkReport interfaces
+└── README.md
+```
+
+---
+
+## Backend Reference
+
+Base URL: `http://localhost:8080`
+
+### REST API
+
+#### Webhooks
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/api/v1/webhook/razorpay` | Razorpay webhook ingress. Requires header `X-Razorpay-Signature` (HMAC-SHA256 of raw body). Handles `payment.failed` (→ recovery pipeline), `payment.captured` / `payment_link.paid` (→ settlement). Returns `200` processed · `401` bad signature · `202` queued into DLQ after internal failure. |
+
+#### Real-time stream & history
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/v1/stream/events` | Server-Sent Events stream (`text/event-stream`). Events are emitted under the custom name **`recovery-event`**. |
+| `GET` | `/api/v1/stream/history` | Full JSON dump of all dunning events (dashboard hydration source). |
+
+#### Customer self-service
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/v1/customer/invoice/{paymentId}` | Fetch a single dunning event (invoice view). |
+| `POST` | `/api/v1/customer/resolve/{paymentId}` | Mark invoice paid from the checkout portal. Body (optional): `{"method":"UPI"}` (also `CARD`, `NETBANKING`). Sets `RECOVERED_CUSTOMER_PAID` and broadcasts. |
+
+#### Simulation & benchmark harness
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/api/v1/test/simulate?type=SOFT\|HARD&email=...&amount=...` | Fabricates a Razorpay-shaped `payment.failed` payload and pushes it through the real pipeline. `type` defaults to `HARD`; amount defaults to a random ₹499–₹4999. |
+| `POST` | `/api/v1/test/simulate-batch?totalEvents=50` | Fires a mixed hard/soft batch and returns benchmark metrics: batch size, escalations, queued backoffs, total value processed (₹), duration ms, throughput events/sec. |
+| `POST` | `/api/v1/test/simulate-capture?paymentId=...&method=UPI` | Simulates a settlement webhook for an existing event. |
+| `POST` | `/api/v1/test/simulate-dlq` | Injects a corrupted payload directly into the dead-letter queue. |
+
+### Scheduled Jobs & Async Pipeline
+
+| Job | Cadence | Behavior |
+|---|---|---|
+| `SmartRetryScheduler.executePendingRetries` | every 10 s | Executes due `SCHEDULED` soft-fail retries; ~70% simulated success; backoff 15/30/60 s (+0–5 s jitter); escalates after 3 attempts. |
+| `WebhookDlqService.processDlqRetries` | every 20 s | Replays `RETRY_PENDING` webhooks; backoff 30s → 60s → 120s; parks in `DEAD_LETTER` after 3 failed attempts. |
+| `processWebhookPayloadAsync` | on demand (@Async) | Parses webhook, idempotency gate, classify, persist, notify, broadcast. |
+| `NotificationServiceImpl.sendEmail/Sms` | on demand (@Async) | Non-blocking multi-channel dunning dispatch. |
+
+### Data Model
+
+**`dunning_events`** (entity `DunningEvent`)
+| Column | Type | Notes |
+|---|---|---|
+| `id` | BIGSERIAL PK | |
+| `payment_id` | VARCHAR(100) | UNIQUE + indexed — idempotency key |
+| `amount` | NUMERIC | Stored in ₹ (converted from paise) |
+| `customer_email`, `customer_contact` | VARCHAR | Dunning targets |
+| `error_code`, `error_reason` | VARCHAR/TEXT | From Razorpay payload |
+| `category` | enum STRING | `TRANSIENT_SOFT_FAIL` \| `PERMANENT_HARD_FAIL` |
+| `strategy_applied` | VARCHAR | e.g., `SMART_BACKOFF_RETRY`, `AUTONOMOUS_PAYMENT_LINK_ESCALATION` |
+| `reasoning_trace` | VARCHAR(1000) | Human-readable audit trail shown as "⚡ Agent Trace" in the UI |
+| `recovery_url` | VARCHAR | Razorpay Payment Link short URL |
+| `status` | VARCHAR | `SCHEDULED`, `RECOVERED_ACTION_TAKEN`, `RECOVERED_RETRY_SUCCESS`, `RECOVERED_CUSTOMER_PAID` |
+| `retry_count`, `max_retries` | INT | Defaults 0 / 3 |
+| `next_retry_at` | TIMESTAMPTZ | Composite-indexed with `status` for the scheduler query |
+| `created_at` | TIMESTAMPTZ | |
+
+**`webhook_dlq_events`** (entity `WebhookDlqEvent`)
+| Column | Notes |
+|---|---|
+| `id`, `event_type`, `raw_payload` (TEXT), `exception_message` (TEXT) | Original failure context |
+| `retry_count` / `max_retries` (3) | Bounded replay budget |
+| `status` | `RETRY_PENDING` → `RESOLVED` \| `DEAD_LETTER` |
+| `next_retry_at` | Composite-indexed with `status` for the reprocessor query |
+
+### Configuration
+
+All settings are environment-overridable. A `.env` file in `backend/revenueRecovery/` is loaded automatically at startup (missing file is ignored).
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `RAZORPAY_KEY_ID` | placeholder test key | Razorpay API key (Payment Links) |
+| `RAZORPAY_KEY_SECRET` | placeholder secret | Razorpay API secret |
+| `RAZORPAY_WEBHOOK_SECRET` | placeholder secret | HMAC verification secret. Verification is skipped only if blank/`dummy_secret` (dev convenience). |
+| `DB_URL` | `jdbc:postgresql://localhost:5432/revenue_recovery` | PostgreSQL JDBC URL |
+| `DB_USER` / `DB_PASS` | `postgres` / `postgres` | DB credentials |
+| `MAIL_ENABLED` | `false` | When `false`, emails are logged as `[SIMULATION EMAIL DISPATCH]` instead of sent |
+| `MAIL_HOST` / `MAIL_PORT` | `smtp.gmail.com` / `587` | SMTP server (STARTTLS + auth enabled) |
+| `MAIL_USERNAME` / `MAIL_PASSWORD` | empty | SMTP credentials |
+| `MAIL_FROM` | `billing@recoveryengine.io` | Sender address |
+| `TWILIO_ENABLED` | `false` | SMS/WhatsApp are always log-simulated in this version |
+
+Other notable properties: `server.port=8080`, `spring.jpa.hibernate.ddl-auto=update` (schema auto-created; Flyway dependency + `V1__init_recovery_events_schema.sql` exist but `spring.flyway.enabled=false`), CORS allowed origins `http://localhost:5173` and `http://localhost:3000`.
+
+---
+
+## Frontend Reference
+
+Single-page operations console ("Razorpay AI Revenue Recovery Engine"), dev-served on **port 5173**, talking to the hardcoded backend origin `http://localhost:8080`.
+
+### Dashboard sections
+
+1. **Header** — live status indicator plus simulation controls: target email input, **Soft Fail** and **Hard Fail** injectors, and a primary **Run 50-Event Batch** benchmark button.
+2. **KPI Grid** — three cards: *Failed Payments Intercepted* (total events), *Autonomous Interventions* (recovered count), *Salvaged Revenue Pool* (sum of ₹ amounts recovered).
+3. **Live Analytics Panel** — overall recovery efficiency (% + progress bar with ₹ saved out of ₹ total), soft-vs-hard pipeline ratio stacked bar (queued backoffs vs. direct links), top failure triggers ranked by `error_code` frequency, and **Export Financial Audit CSV** (client-side CSV generation → `dunning_recovery_report_<date>.csv`, 13 audit columns).
+4. **Live Event Stream** — scrollable feed of event cards showing payment ID, email, timestamp, color-coded category chip, amount, spinning "Attempt n/3" badge while a retry is pending, strategy label, and the **⚡ Agent Trace** reasoning audit line. Recovered-via-retry cards get a green banner; escalated cards show their clickable payment link, an "Email Dispatched" badge, and a **Preview** button that renders the exact customer-facing dunning email in a modal.
+5. **Batch Benchmark Banner** — dismissible summary of batch runs: size, escalated-to-links count, backoff-queued count, total volume ₹, processing latency.
+6. **Customer Payment Portal** — full-screen simulated Razorpay checkout: loads the invoice, shows the decline reason, offers UPI / Card / Netbanking selection, authorizes payment via the resolve endpoint, then displays an animated success receipt ("SETTLED — LIVE BROADCASTED") that also flips live on the ops dashboard via SSE.
+
+### Data flow
+
+- On mount: `GET /stream/history` hydrates the feed (newest-first), then an `EventSource` subscribes to `/api/v1/stream/events`.
+- Incoming `recovery-event` frames are **upserted by `paymentId`**, so retry-state transitions mutate the same card live instead of duplicating rows.
+- Connection closes cleanly on unmount.
+
+---
+
+## Getting Started
+
+### Prerequisites
+
+- **JDK 21**
+- **Maven** (or use the bundled wrapper `mvnw.cmd`)
+- **PostgreSQL 14+** running locally
+- **Node.js 18+** and npm
+
+### 1. Database setup
+
+```sql
+CREATE DATABASE revenue_recovery;
+```
+
+(Default schema creation is automatic via Hibernate `ddl-auto=update`.)
+
+### 2. Configure the backend
+
+Create `backend/revenueRecovery/.env`:
+
+```env
+RAZORPAY_KEY_ID=rzp_test_xxxxxxxxxxxx
+RAZORPAY_KEY_SECRET=your_razorpay_secret
+RAZORPAY_WEBHOOK_SECRET=your_webhook_secret
+DB_URL=jdbc:postgresql://localhost:5432/revenue_recovery
+DB_USER=postgres
+DB_PASS=postgres
+MAIL_ENABLED=false
+MAIL_FROM=billing@yourcompany.io
+```
+
+> The app runs fully without Razorpay/mail credentials — payment links fall back to synthetic URLs and emails are logged as simulations.
+
+### 3. Run the backend
+
+```powershell
+cd backend/revenueRecovery
+.\mvnw.cmd spring-boot:run
+```
+
+Backend starts on **http://localhost:8080**.
+
+### 4. Run the frontend
+
+```powershell
+cd frontend/recovery-ui
+npm install
+npm run dev
+```
+
+Dashboard opens at **http://localhost:5173**.
+
+### 5. Watch it recover revenue
+
+Click **Hard Fail** in the header — within seconds you'll see the event classified, a payment link generated, an email dispatched (simulated), and the card appear live via SSE.
+
+---
+
+## Demo Walkthrough
+
+| Scenario | Try this | Expected behavior |
+|---|---|---|
+| Soft failure auto-retry | Click **Soft Fail** | Card appears with amber `TRANSIENT_SOFT_FAIL` chip + spinning "Attempt 1/3". Within ~15–75 s it flips green (`RECOVERED_RETRY_SUCCESS`) or exhausts and escalates to a payment link. |
+| Hard failure escalation | Click **Hard Fail** | Rose chip, immediate payment-link generation, "Email Dispatched" badge, **Preview** shows the exact HTML dunning email. |
+| Batch benchmark | Click **Run 50-Event Batch** | Banner reports throughput, split between escalations and queued backoffs, and total ₹ processed. |
+| Settlement webhook | `POST /api/v1/test/simulate-capture?paymentId=<id>` | Card transitions to `RECOVERED_CUSTOMER_PAID`. |
+| Customer checkout | Open an escalated event's portal flow | Choose UPI/Card/Netbanking → authorize → animated receipt; dashboard updates in real time. |
+| DLQ resilience | `POST /api/v1/test/simulate-dlq` | Corrupt payload lands in `RETRY_PENDING`; watch the 20 s reprocessor bounce it until `DEAD_LETTER`. |
+| Audit export | Click **Export Financial Audit CSV** | Downloads `dunning_recovery_report_<today>.csv` with all events. |
+
+---
+
+## Project Status
 
 - [x] Architecture design
-- [ ] Backend implementation
-- [ ] Frontend dashboard
-- [ ] Incident documentation
+- [x] Webhook ingestion with HMAC-SHA256 verification
+- [x] Failure classifier (soft/hard)
+- [x] Smart exponential-backoff retry scheduler
+- [x] Razorpay Payment Link escalation
+- [x] Multi-channel dunning notifications (HTML email live; SMS/WhatsApp simulated)
+- [x] PostgreSQL persistence + SSE state hydration
+- [x] Dead-letter queue with automated backoff reprocessing
+- [x] `payment.captured` / `payment_link.paid` settlement pipeline
+- [x] Customer one-click resolution portal
+- [x] React real-time dashboard (KPIs, analytics, agent traces, email preview)
+- [x] Batch benchmark harness + CSV financial audit export
+- [ ] Production hardening (auth on management endpoints, externalized frontend API URL, CI pipeline)
+- [ ] Real SMS/WhatsApp delivery (Twilio integration stubbed)
+
+## Known Limitations
+
+- **Simulation semantics**: retry outcomes are ~70% randomly successful, and SMS/WhatsApp dispatches are console logs only — by design for demo determinism.
+- **No authentication** on API endpoints; intended for local/demo use behind a trusted network.
+- **Hardcoded backend origin** (`http://localhost:8080`) inside frontend sources — swap for `import.meta.env.VITE_API_URL` before deploying.
+- **Flyway disabled**: schema drift is handled by Hibernate `ddl-auto=update`; the migration script exists for future enablement.
+- **No formal circuit breaker library** — resilience comes from bounded retries + the DLQ pattern.
