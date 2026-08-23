@@ -61,7 +61,7 @@ export const EventCard: React.FC<EventCardProps> = ({ event, onPreview }) => {
         </div>
       )}
 
-      {/* Hard Failure Escalation Box */}
+    {/* Hard Failure Escalation Box */}
       {event.recoveryUrl && (
         <div className="flex flex-col sm:flex-row sm:items-center justify-between bg-emerald-50 border border-emerald-200 p-2.5 rounded text-xs text-emerald-900 gap-2">
           <div className="flex items-center gap-2 font-mono truncate">
@@ -83,9 +83,9 @@ export const EventCard: React.FC<EventCardProps> = ({ event, onPreview }) => {
             </span>
             <button
               onClick={() => onPreview(event)}
-              className="text-[10px] uppercase font-bold tracking-wider bg-blue-600 hover:bg-blue-700 px-2.5 py-1 rounded text-white flex items-center gap-1 transition shadow-sm ml-1"
+              className="text-[10px] uppercase font-bold tracking-wider bg-blue-600 hover:bg-blue-700 px-2.5 py-1 rounded text-white flex items-center gap-1 transition shadow-sm"
             >
-              <Mail size={11} /> Email Preview
+              <Mail size={11} /> Preview
             </button>
           </div>
         </div>

@@ -5,6 +5,7 @@ import { KpiGrid } from './components/KpiGrid';
 import { AnalyticsPanel } from './components/AnalyticsPanel';
 import { EventList } from './components/EventList';
 import { NotificationPreviewModal } from './components/NotificationPreviewModal';
+import { CustomerPaymentPortal } from './components/CustomerPaymentPortal';
 import type { DunningEvent, BenchmarkReport } from './types/recovery';
 
 export default function App() {
@@ -13,6 +14,7 @@ export default function App() {
   const [targetEmail, setTargetEmail] = useState('customer@example.com');
   const [activeModalEvent, setActiveModalEvent] = useState<DunningEvent | null>(null);
   const [benchmarkReport, setBenchmarkReport] = useState<BenchmarkReport | null>(null);
+  const [activeCustomerPaymentId, setActiveCustomerPaymentId] = useState<string | null>(null);
 
   useEffect(() => {
     fetch('http://localhost:8080/api/v1/stream/history')
@@ -24,7 +26,15 @@ export default function App() {
 
     eventSource.addEventListener('recovery-event', (e) => {
       const incoming: DunningEvent = JSON.parse(e.data);
-      setEvents((prev) => [incoming, ...prev]);
+      setEvents((prev) => {
+        const idx = prev.findIndex((item) => item.paymentId === incoming.paymentId);
+        if (idx !== -1) {
+          const updated = [...prev];
+          updated[idx] = incoming;
+          return updated;
+        }
+        return [incoming, ...prev];
+      });
     });
 
     return () => eventSource.close();
@@ -57,11 +67,29 @@ export default function App() {
 
   const totalFailed = events.length;
   const totalRecoveredCount = events.filter(
-    (e) => e.status === 'RECOVERED_ACTION_TAKEN' || e.status === 'RECOVERED_RETRY_SUCCESS'
+    (e) =>
+      e.status === 'RECOVERED_ACTION_TAKEN' ||
+      e.status === 'RECOVERED_RETRY_SUCCESS' ||
+      e.status === 'RECOVERED_CUSTOMER_PAID'
   ).length;
   const totalRevenueSalvaged = events
-    .filter((e) => e.status === 'RECOVERED_ACTION_TAKEN' || e.status === 'RECOVERED_RETRY_SUCCESS')
+    .filter(
+      (e) =>
+        e.status === 'RECOVERED_ACTION_TAKEN' ||
+        e.status === 'RECOVERED_RETRY_SUCCESS' ||
+        e.status === 'RECOVERED_CUSTOMER_PAID'
+    )
     .reduce((acc, curr) => acc + (curr.amount || 0), 0);
+
+  // If viewing customer payment portal
+  if (activeCustomerPaymentId) {
+    return (
+      <CustomerPaymentPortal
+        paymentId={activeCustomerPaymentId}
+        onBackToDashboard={() => setActiveCustomerPaymentId(null)}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 p-6 md:p-10 font-sans">
@@ -84,7 +112,6 @@ export default function App() {
         totalRevenueSalvaged={totalRevenueSalvaged}
       />
 
-      {/* Live Analytics & Financial Audit Export */}
       <AnalyticsPanel events={events} />
 
       <EventList
