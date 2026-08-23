@@ -13,6 +13,7 @@ import org.json.JSONObject;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -163,5 +164,25 @@ public class DunningRecoveryService {
             log.warn("Razorpay API call simulated (test credentials): {}", ex.getMessage());
             return "https://rzp.io/i/rec_" + Math.abs(refId.hashCode());
         }
+
+
+    }
+
+    @Transactional
+    public void processPaymentCaptured(String paymentId, String amountStr, String method) {
+        log.info("Processing settlement webhook for payment: {}", paymentId);
+
+        eventRepository.findByPaymentId(paymentId).ifPresentOrElse(event -> {
+            event.setStatus("RECOVERED_CUSTOMER_PAID");
+            event.setStrategyApplied("WEBHOOK_PAYMENT_CAPTURED_SETTLED");
+            event.setReasoningTrace(String.format("Payment successfully captured via %s gateway. Invoice balance marked as settled.", method != null ? method : "Razorpay"));
+            event.setNextRetryAt(null);
+
+            DunningEvent saved = eventRepository.save(event);
+            sseStreamService.broadcast(saved);
+            log.info("Successfully settled and broadcasted payment recovery for: {}", paymentId);
+        }, () -> {
+            log.warn("Captured payment {} was not previously flagged in dunning registry. No state change required.", paymentId);
+        });
     }
 }

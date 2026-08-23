@@ -98,4 +98,13 @@ public class TestSimulationController {
 
         dunningService.processWebhookPayloadAsync(mockPayload);
     }
+
+    @PostMapping("/simulate-capture")
+    public ResponseEntity<String> simulatePaymentCapture(
+            @RequestParam String paymentId,
+            @RequestParam(defaultValue = "UPI") String method
+    ) {
+        dunningService.processPaymentCaptured(paymentId, "1000", method);
+        return ResponseEntity.ok("Simulated payment capture processed for: " + paymentId);
+    }
 }
