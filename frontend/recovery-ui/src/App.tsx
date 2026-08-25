@@ -3,6 +3,7 @@ import { Header } from './components/Header';
 import { BenchmarkBanner } from './components/BenchmarkBanner';
 import { KpiGrid } from './components/KpiGrid';
 import { AnalyticsPanel } from './components/AnalyticsPanel';
+import { BankRadarBanner } from './components/BankRadarBanner';
 import { EventList } from './components/EventList';
 import { NotificationPreviewModal } from './components/NotificationPreviewModal';
 import { CustomerPaymentPortal } from './components/CustomerPaymentPortal';
@@ -111,6 +112,7 @@ export default function App() {
         totalRecoveredCount={totalRecoveredCount}
         totalRevenueSalvaged={totalRevenueSalvaged}
       />
+      <BankRadarBanner/>
 
       <AnalyticsPanel events={events} />
 

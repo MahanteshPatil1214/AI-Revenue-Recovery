@@ -32,7 +32,8 @@ public class SmartRetryScheduler {
     @Transactional
     public void executePendingRetries() {
         Instant now = Instant.now();
-        List<DunningEvent> dueEvents = eventRepository.findPendingRetriesReady(now);
+        List<DunningEvent> dueEvents = eventRepository
+                .findByStatusAndNextRetryAtLessThanEqualOrderByNextRetryAtAsc("SCHEDULED", now);
 
         if (dueEvents.isEmpty()) {
             return;

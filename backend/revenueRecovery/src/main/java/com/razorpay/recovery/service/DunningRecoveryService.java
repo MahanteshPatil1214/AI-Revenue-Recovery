@@ -29,6 +29,7 @@ public class DunningRecoveryService {
     private final SseStreamService sseStreamService;
     private final DunningEventRepository eventRepository;
     private final NotificationService notificationService;
+    private final SmartTimingEngine smartTimingEngine;
 
     private final Map<String, Boolean> activeLocks = new ConcurrentHashMap<>();
 
@@ -69,25 +70,31 @@ public class DunningRecoveryService {
                     || errorCode.contains("BANK_DOWNTIME");
 
             DunningEvent record;
+// Extract real issuing rail from Razorpay payload entity
+            String rawBank = payment.path("bank").asText(null);
+            if (rawBank == null || rawBank.isBlank()) {
+                rawBank = payment.path("method").asText("UPI");
+            }
+            String bankCode = smartTimingEngine.normalizeBank(rawBank);
 
             if (isTransient) {
-                // Soft failure -> Schedule first smart retry in 15 seconds
-                Instant firstRetryWindow = Instant.now().plusSeconds(15);
+                // Dynamically evaluate optimal retry window based on the actual bank rail
+                SmartTimingEngine.SchedulingDecision decision = smartTimingEngine.computeOptimalRetryWindow(errorCode, bankCode, 0);
 
                 record = DunningEvent.builder()
                         .paymentId(paymentId)
                         .amount(amount)
                         .customerEmail(email)
                         .customerContact(contact)
-                        .errorCode(errorCode)
-                        .errorReason(errorReason)
+                        .errorCode(errorCode + "_" + bankCode)
+                        .errorReason(errorReason + " on " + bankCode + " rail")
                         .category(FailureCategory.TRANSIENT_SOFT_FAIL)
-                        .strategyApplied("SMART_BACKOFF_RETRY")
-                        .reasoningTrace("Transient network/bank glitch detected (" + errorCode + "). Queued retry #1 with backoff in 15s.")
+                        .strategyApplied(decision.strategyLabel())
+                        .reasoningTrace(decision.algorithmReasoning())
                         .status("SCHEDULED")
                         .retryCount(0)
                         .maxRetries(3)
-                        .nextRetryAt(firstRetryWindow)
+                        .nextRetryAt(decision.scheduledTime())
                         .createdAt(Instant.now())
                         .build();
             } else {

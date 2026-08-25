@@ -49,6 +49,10 @@ public class WebhookDlqService {
         Instant now = Instant.now();
         List<WebhookDlqEvent> pendingItems = dlqRepository.findPendingRetriesReady(now);
 
+        for (WebhookDlqEvent item : pendingItems) {
+            reprocessIndividualDlqItem(item);
+        }
+
         if (pendingItems.isEmpty()) {
             return;
         }

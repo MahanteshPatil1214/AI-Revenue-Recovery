@@ -1,6 +1,7 @@
 package com.razorpay.recovery.repository;
 
 import com.razorpay.recovery.model.DunningEvent;
+import com.razorpay.recovery.model.WebhookDlqEvent;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -12,9 +13,21 @@ import java.util.Optional;
 
 @Repository
 public interface DunningEventRepository extends JpaRepository<DunningEvent, Long> {
+
     Optional<DunningEvent> findByPaymentId(String paymentId);
+
     boolean existsByPaymentId(String paymentId);
 
-    @Query("SELECT e FROM DunningEvent e WHERE e.status = 'SCHEDULED' AND e.nextRetryAt <= :now ORDER BY e.nextRetryAt ASC")
-    List<DunningEvent> findPendingRetriesReady(@Param("now") Instant now);
+    List<DunningEvent> findByStatusAndNextRetryAtLessThanEqualOrderByNextRetryAtAsc(String status, Instant timestamp);
+
+    // Dynamic count of total events for a bank rail in a time window
+    @Query("SELECT COUNT(e) FROM DunningEvent e WHERE (UPPER(e.errorCode) LIKE %:bank% OR UPPER(e.errorReason) LIKE %:bank%) AND e.createdAt >= :since")
+    long countBankEventsSince(@Param("bank") String bank, @Param("since") Instant since);
+
+    // Dynamic count of soft/gateway failures for that bank rail in the same window
+    @Query("SELECT COUNT(e) FROM DunningEvent e WHERE (UPPER(e.errorCode) LIKE %:bank% OR UPPER(e.errorReason) LIKE %:bank%) AND e.category = com.razorpay.recovery.model.FailureCategory.TRANSIENT_SOFT_FAIL AND e.createdAt >= :since")
+    long countBankFailuresSince(@Param("bank") String bank, @Param("since") Instant since);
+
+    @Query("SELECT d FROM WebhookDlqEvent d WHERE d.status = 'RETRY_PENDING' AND d.nextRetryAt <= :now ORDER BY d.nextRetryAt ASC")
+    List<WebhookDlqEvent> findPendingRetriesReady(@Param("now") Instant now);
 }
