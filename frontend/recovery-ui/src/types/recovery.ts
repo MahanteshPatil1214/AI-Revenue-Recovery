@@ -1,3 +1,19 @@
+export type DunningStatus =
+  | 'SCHEDULED'
+  | 'RETRYING'
+  | 'RECOVERED_ACTION_TAKEN'
+  | 'RECOVERED_RETRY_SUCCESS'
+  | 'RECOVERED_CUSTOMER_PAID'
+  | 'EXHAUSTED_ESCALATED';
+
+export type FailureCategory = 'TRANSIENT_SOFT_FAIL' | 'PERMANENT_HARD_FAIL';
+
+export const RECOVERED_STATUSES: ReadonlySet<string> = new Set([
+  'RECOVERED_ACTION_TAKEN',
+  'RECOVERED_RETRY_SUCCESS',
+  'RECOVERED_CUSTOMER_PAID',
+]);
+
 export interface DunningEvent {
   id?: number;
   paymentId: string;
@@ -6,11 +22,11 @@ export interface DunningEvent {
   customerContact: string;
   errorCode: string;
   errorReason: string;
-  category: 'TRANSIENT_SOFT_FAIL' | 'PERMANENT_HARD_FAIL';
+  category: FailureCategory;
   strategyApplied: string;
   reasoningTrace: string;
   recoveryUrl?: string;
-  status: string;
+  status: DunningStatus;
   retryCount?: number;
   maxRetries?: number;
   nextRetryAt?: string;

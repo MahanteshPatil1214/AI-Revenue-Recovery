@@ -17,7 +17,7 @@ public class SseStreamService {
     private final List<SseEmitter> emitters = new CopyOnWriteArrayList<>();
 
     public SseEmitter subscribe() {
-        SseEmitter emitter = new SseEmitter(Long.MAX_VALUE);
+        SseEmitter emitter = new SseEmitter(30 * 60 * 1000L);
         emitters.add(emitter);
 
         emitter.onCompletion(() -> emitters.remove(emitter));

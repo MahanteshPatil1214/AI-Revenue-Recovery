@@ -1,13 +1,14 @@
 import React from 'react';
-import { CheckCircle2, Mail, RefreshCw, Clock } from 'lucide-react';
+import { CheckCircle2, Mail, RefreshCw, Sparkles } from 'lucide-react';
 import type { DunningEvent } from '../types/recovery';
 
 interface EventCardProps {
   event: DunningEvent;
   onPreview: (event: DunningEvent) => void;
+  onOpenPortal: (paymentId: string) => void;
 }
 
-export const EventCard: React.FC<EventCardProps> = ({ event, onPreview }) => {
+export const EventCard: React.FC<EventCardProps> = React.memo(({ event, onPreview, onOpenPortal }) => {
   const isSoftScheduled = event.status === 'SCHEDULED' && event.category === 'TRANSIENT_SOFT_FAIL';
   const isRetryRecovered = event.status === 'RECOVERED_RETRY_SUCCESS';
 
@@ -38,7 +39,7 @@ export const EventCard: React.FC<EventCardProps> = ({ event, onPreview }) => {
         {/* Retry Badge Indicator */}
         {(event.retryCount ?? 0) > 0 && (
           <span className="text-[11px] font-bold bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded flex items-center gap-1">
-            <RefreshCw size={11} className={isSoftScheduled ? "animate-spin" : ""} />
+            <RefreshCw size={11} className={isSoftScheduled ? 'animate-spin' : ''} />
             Attempt {event.retryCount}/{event.maxRetries || 3}
           </span>
         )}
@@ -61,35 +62,41 @@ export const EventCard: React.FC<EventCardProps> = ({ event, onPreview }) => {
         </div>
       )}
 
-    {/* Hard Failure Escalation Box */}
-      {event.recoveryUrl && (
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between bg-emerald-50 border border-emerald-200 p-2.5 rounded text-xs text-emerald-900 gap-2">
-          <div className="flex items-center gap-2 font-mono truncate">
-            <CheckCircle2 size={15} className="text-emerald-600 shrink-0" />
-            <span className="font-semibold">Razorpay Link:</span>
-            <a
-              href={event.recoveryUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="underline text-emerald-700 hover:text-emerald-800 font-semibold truncate max-w-xs"
-            >
-              {event.recoveryUrl}
-            </a>
-          </div>
-
-          <div className="flex items-center gap-1.5 shrink-0">
-            <span className="bg-emerald-100 text-emerald-800 font-medium px-2 py-0.5 rounded text-[10px] flex items-center gap-1 border border-emerald-300">
-              <Mail size={10} /> Email Dispatched
-            </span>
-            <button
-              onClick={() => onPreview(event)}
-              className="text-[10px] uppercase font-bold tracking-wider bg-blue-600 hover:bg-blue-700 px-2.5 py-1 rounded text-white flex items-center gap-1 transition shadow-sm"
-            >
-              <Mail size={11} /> Preview
-            </button>
-          </div>
+      {/* Action Footer */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between bg-emerald-50 border border-emerald-200 p-2.5 rounded text-xs text-emerald-900 gap-2">
+        <div className="flex items-center gap-2 font-mono truncate">
+          <CheckCircle2 size={15} className="text-emerald-600 shrink-0" />
+          <span className="font-semibold">Razorpay Link:</span>
+          <a
+            href={event.recoveryUrl || '#'}
+            target="_blank"
+            rel="noreferrer"
+            className="underline text-emerald-700 hover:text-emerald-800 font-semibold truncate max-w-xs"
+          >
+            {event.recoveryUrl || 'Generated'}
+          </a>
         </div>
-      )}
+
+        <div className="flex items-center gap-1.5 shrink-0">
+          <span className="bg-emerald-100 text-emerald-800 font-medium px-2 py-0.5 rounded text-[10px] flex items-center gap-1 border border-emerald-300">
+            <Mail size={10} /> Email Dispatched
+          </span>
+          <button
+            type="button"
+            onClick={() => onPreview(event)}
+            className="text-[10px] uppercase font-bold tracking-wider bg-blue-600 hover:bg-blue-700 px-2.5 py-1 rounded text-white flex items-center gap-1 transition shadow-sm cursor-pointer"
+          >
+            <Mail size={11} /> Preview
+          </button>
+          <button
+            type="button"
+            onClick={() => onOpenPortal(event.paymentId)}
+            className="text-[10px] uppercase font-bold tracking-wider bg-emerald-600 hover:bg-emerald-700 px-2.5 py-1 rounded text-white flex items-center gap-1 transition shadow-sm cursor-pointer"
+          >
+            <Sparkles size={11} /> Retention Portal
+          </button>
+        </div>
+      </div>
     </div>
   );
-};
+});

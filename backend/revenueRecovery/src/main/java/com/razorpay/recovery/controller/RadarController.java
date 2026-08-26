@@ -2,6 +2,7 @@ package com.razorpay.recovery.controller;
 
 import com.razorpay.recovery.service.BankHealthRadarService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.annotation.Profile;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -10,7 +11,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/v1/radar")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "*")
+@Profile("dev")
 public class RadarController {
 
     private final BankHealthRadarService radarService;
@@ -19,7 +20,7 @@ public class RadarController {
     public ResponseEntity<Map<String, BankHealthRadarService.BankHealthMetrics>> getRadarStatus() {
         return ResponseEntity.ok(radarService.getAllBankStatuses());
     }
-    
+
 
     @PostMapping("/restore")
     public ResponseEntity<String> restoreHealth(@RequestParam(defaultValue = "HDFC") String bank) {

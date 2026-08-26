@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Header } from './components/Header';
 import { BenchmarkBanner } from './components/BenchmarkBanner';
 import { KpiGrid } from './components/KpiGrid';
@@ -7,6 +7,9 @@ import { BankRadarBanner } from './components/BankRadarBanner';
 import { EventList } from './components/EventList';
 import { NotificationPreviewModal } from './components/NotificationPreviewModal';
 import { CustomerPaymentPortal } from './components/CustomerPaymentPortal';
+import { RecoveryPortalModal } from './components/RecoveryPortalModal';
+import { API_STREAM_URL, API_TEST_URL } from './config/api';
+import { RECOVERED_STATUSES } from './types/recovery';
 import type { DunningEvent, BenchmarkReport } from './types/recovery';
 
 export default function App() {
@@ -16,73 +19,100 @@ export default function App() {
   const [activeModalEvent, setActiveModalEvent] = useState<DunningEvent | null>(null);
   const [benchmarkReport, setBenchmarkReport] = useState<BenchmarkReport | null>(null);
   const [activeCustomerPaymentId, setActiveCustomerPaymentId] = useState<string | null>(null);
+  const [portalPaymentId, setPortalPaymentId] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch('http://localhost:8080/api/v1/stream/history')
-      .then((res) => res.json())
-      .then((data) => setEvents(Array.isArray(data) ? data.reverse() : []))
-      .catch(() => console.log('Waiting for backend server...'));
-
-    const eventSource = new EventSource('http://localhost:8080/api/v1/stream/events');
-
-    eventSource.addEventListener('recovery-event', (e) => {
-      const incoming: DunningEvent = JSON.parse(e.data);
-      setEvents((prev) => {
-        const idx = prev.findIndex((item) => item.paymentId === incoming.paymentId);
-        if (idx !== -1) {
-          const updated = [...prev];
-          updated[idx] = incoming;
-          return updated;
-        }
-        return [incoming, ...prev];
-      });
-    });
-
-    return () => eventSource.close();
+    const params = new URLSearchParams(window.location.search);
+    const payId = params.get('payId');
+    if (payId) {
+      setActiveCustomerPaymentId(payId);
+    }
   }, []);
 
-  const runSimulation = async (type: 'SOFT' | 'HARD') => {
+  useEffect(() => {
+    const controller = new AbortController();
+
+    fetch(`${API_STREAM_URL}/history`, { signal: controller.signal })
+      .then((res) => {
+        if (!res.ok) throw new Error('Failed to fetch history');
+        return res.json();
+      })
+      .then((data) => setEvents(Array.isArray(data) ? data.reverse() : []))
+      .catch((err) => {
+        if (err.name !== 'AbortError') console.log('Waiting for backend server...');
+      });
+
+    const eventSource = new EventSource(`${API_STREAM_URL}/events`);
+
+    eventSource.addEventListener('recovery-event', (e) => {
+      try {
+        const incoming: DunningEvent = JSON.parse(e.data);
+        setEvents((prev) => {
+          const idx = prev.findIndex((item) => item.paymentId === incoming.paymentId);
+          if (idx !== -1) {
+            const updated = [...prev];
+            updated[idx] = incoming;
+            return updated;
+          }
+          return [incoming, ...prev];
+        });
+      } catch {
+        console.error('Failed to parse SSE event');
+      }
+    });
+
+    return () => {
+      controller.abort();
+      eventSource.close();
+    };
+  }, []);
+
+  const runSimulation = useCallback(async (type: 'SOFT' | 'HARD') => {
     setLoadingSim(true);
     try {
-      await fetch(
-        `http://localhost:8080/api/v1/test/simulate?type=${type}&email=${encodeURIComponent(targetEmail)}`,
+      const res = await fetch(
+        `${API_TEST_URL}/simulate?type=${type}&email=${encodeURIComponent(targetEmail)}`,
         { method: 'POST' }
       );
+      if (!res.ok) console.error('Simulation failed:', res.status);
+    } catch (err) {
+      console.error('Simulation error:', err);
     } finally {
       setLoadingSim(false);
     }
-  };
+  }, [targetEmail]);
 
-  const runBatchBenchmark = async () => {
+  const runBatchBenchmark = useCallback(async () => {
     setLoadingSim(true);
     try {
-      const res = await fetch('http://localhost:8080/api/v1/test/simulate-batch?totalEvents=50', {
+      const res = await fetch(`${API_TEST_URL}/simulate-batch?totalEvents=50`, {
         method: 'POST',
       });
+      if (!res.ok) throw new Error('Benchmark failed');
       const data: BenchmarkReport = await res.json();
       setBenchmarkReport(data);
+    } catch (err) {
+      console.error('Benchmark error:', err);
     } finally {
       setLoadingSim(false);
     }
-  };
+  }, []);
 
   const totalFailed = events.length;
-  const totalRecoveredCount = events.filter(
-    (e) =>
-      e.status === 'RECOVERED_ACTION_TAKEN' ||
-      e.status === 'RECOVERED_RETRY_SUCCESS' ||
-      e.status === 'RECOVERED_CUSTOMER_PAID'
-  ).length;
-  const totalRevenueSalvaged = events
-    .filter(
-      (e) =>
-        e.status === 'RECOVERED_ACTION_TAKEN' ||
-        e.status === 'RECOVERED_RETRY_SUCCESS' ||
-        e.status === 'RECOVERED_CUSTOMER_PAID'
-    )
-    .reduce((acc, curr) => acc + (curr.amount || 0), 0);
+  const totalRecoveredCount = useMemo(
+    () => events.filter((e) => RECOVERED_STATUSES.has(e.status)).length,
+    [events]
+  );
+  const totalRevenueSalvaged = useMemo(
+    () => events
+      .filter((e) => RECOVERED_STATUSES.has(e.status))
+      .reduce((acc, curr) => acc + (curr.amount || 0), 0),
+    [events]
+  );
 
-  // If viewing customer payment portal
+  const handlePreview = useCallback((event: DunningEvent) => setActiveModalEvent(event), []);
+  const handleOpenPortal = useCallback((paymentId: string) => setPortalPaymentId(paymentId), []);
+
   if (activeCustomerPaymentId) {
     return (
       <CustomerPaymentPortal
@@ -112,19 +142,28 @@ export default function App() {
         totalRecoveredCount={totalRecoveredCount}
         totalRevenueSalvaged={totalRevenueSalvaged}
       />
-      <BankRadarBanner/>
+
+      <BankRadarBanner />
 
       <AnalyticsPanel events={events} />
 
       <EventList
         events={events}
-        onPreview={(event) => setActiveModalEvent(event)}
+        onPreview={handlePreview}
+        onOpenPortal={handleOpenPortal}
       />
 
       <NotificationPreviewModal
         event={activeModalEvent}
         onClose={() => setActiveModalEvent(null)}
       />
+
+      {portalPaymentId && (
+        <RecoveryPortalModal
+          paymentId={portalPaymentId}
+          onClose={() => setPortalPaymentId(null)}
+        />
+      )}
     </div>
   );
 }

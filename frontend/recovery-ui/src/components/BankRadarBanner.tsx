@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Radio, AlertTriangle, ShieldCheck } from 'lucide-react';
+import { API_RADAR_URL } from '../config/api';
 
 interface BankHealth {
   bankCode: string;
@@ -13,40 +14,55 @@ export const BankRadarBanner: React.FC = () => {
   const [selectedBank, setSelectedBank] = useState<string>('HDFC');
   const [failureRate, setFailureRate] = useState<number>(75);
   const [loading, setLoading] = useState(false);
+  const selectedBankRef = useRef(selectedBank);
+  selectedBankRef.current = selectedBank;
 
-  const fetchRadar = () => {
-    fetch('http://localhost:8080/api/v1/radar/status')
-      .then((r) => r.json())
+  const fetchRadar = useRef(() => {
+    fetch(`${API_RADAR_URL}/status`)
+      .then((r) => {
+        if (!r.ok) throw new Error('Failed to fetch radar');
+        return r.json();
+      })
       .then((data: Record<string, BankHealth>) => {
         setRadarData(data);
-        if (Object.keys(data).length > 0 && !data[selectedBank]) {
+        if (Object.keys(data).length > 0 && !data[selectedBankRef.current]) {
           setSelectedBank(Object.keys(data)[0]);
         }
       })
       .catch(() => {});
-  };
+  }).current;
 
   useEffect(() => {
     fetchRadar();
     const timer = setInterval(fetchRadar, 8000);
     return () => clearInterval(timer);
-  }, []);
+  }, [fetchRadar]);
 
   const triggerOutage = async () => {
     setLoading(true);
-    await fetch(
-      `http://localhost:8080/api/v1/radar/simulate-outage?bank=${selectedBank}&rate=${failureRate}`,
-      { method: 'POST' }
-    );
-    fetchRadar();
-    setLoading(false);
+    try {
+      await fetch(
+        `${API_RADAR_URL}/simulate-outage?bank=${selectedBank}&rate=${failureRate}`,
+        { method: 'POST' }
+      );
+      fetchRadar();
+    } catch (err) {
+      console.error('Failed to simulate outage:', err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const restoreBank = async () => {
     setLoading(true);
-    await fetch(`http://localhost:8080/api/v1/radar/restore?bank=${selectedBank}`, { method: 'POST' });
-    fetchRadar();
-    setLoading(false);
+    try {
+      await fetch(`${API_RADAR_URL}/restore?bank=${selectedBank}`, { method: 'POST' });
+      fetchRadar();
+    } catch (err) {
+      console.error('Failed to restore bank:', err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -68,13 +84,12 @@ export const BankRadarBanner: React.FC = () => {
           </div>
         </div>
 
-        {/* Dynamic Controls Bar */}
         <div className="flex flex-wrap items-center gap-3">
-          {/* Bank Dropdown */}
           <select
             value={selectedBank}
             onChange={(e) => setSelectedBank(e.target.value)}
             disabled={loading}
+            aria-label="Select bank"
             className="bg-slate-800 text-xs text-white border border-slate-700 rounded px-2.5 py-1.5 focus:outline-none"
           >
             {Object.keys(radarData).length > 0 ? (
@@ -88,7 +103,6 @@ export const BankRadarBanner: React.FC = () => {
             )}
           </select>
 
-          {/* Dynamic Rate Slider */}
           <div className="flex items-center gap-2 bg-slate-800/80 px-2.5 py-1 rounded border border-slate-700">
             <span className="text-[11px] text-slate-300 font-mono font-bold w-9">{failureRate}%</span>
             <input
@@ -98,6 +112,7 @@ export const BankRadarBanner: React.FC = () => {
               step="5"
               value={failureRate}
               onChange={(e) => setFailureRate(Number(e.target.value))}
+              aria-label="Failure rate"
               className="w-20 accent-rose-500 cursor-pointer"
             />
           </div>
@@ -120,8 +135,7 @@ export const BankRadarBanner: React.FC = () => {
         </div>
       </div>
 
-      {/* Grid of Bank Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3 pt-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3 pt-4" role="list" aria-label="Bank status grid">
         {Object.values(radarData).map((bank) => {
           const isOutage = bank.status === 'OUTAGE' || bank.failureRatePercent >= 50.0;
           const isDegraded = !isOutage && (bank.status === 'DEGRADED' || bank.failureRatePercent >= 20.0);
@@ -130,6 +144,7 @@ export const BankRadarBanner: React.FC = () => {
           return (
             <div
               key={bank.bankCode}
+              role="listitem"
               className={`p-3 rounded-lg border flex flex-col justify-between transition ${
                 isOutage
                   ? 'bg-rose-950/40 border-rose-700 text-rose-200'

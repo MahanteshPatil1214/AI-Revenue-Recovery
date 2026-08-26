@@ -1,11 +1,14 @@
 import React, { useEffect, useState } from 'react';
-import { ShieldCheck, CheckCircle2, CreditCard, Lock, ArrowLeft } from 'lucide-react';
+import { ShieldCheck, CheckCircle2, CreditCard, Lock, ArrowLeft, Percent, Calendar } from 'lucide-react';
+import { API_CUSTOMER_URL } from '../config/api';
 import type { DunningEvent } from '../types/recovery';
 
 interface CustomerPaymentPortalProps {
   paymentId: string;
   onBackToDashboard: () => void;
 }
+
+const VALID_PLAN_TYPES = new Set(['DISCOUNTED_10PCT', 'MONTHLY_DOWNGRADE']);
 
 export const CustomerPaymentPortal: React.FC<CustomerPaymentPortalProps> = ({
   paymentId,
@@ -17,8 +20,15 @@ export const CustomerPaymentPortal: React.FC<CustomerPaymentPortalProps> = ({
   const [paymentSuccess, setPaymentSuccess] = useState(false);
   const [selectedMethod, setSelectedMethod] = useState<'UPI' | 'CARD' | 'NETBANKING'>('UPI');
 
+  const params = new URLSearchParams(window.location.search);
+  const rawAmt = params.get('amt');
+  const overrideAmount = rawAmt && !isNaN(Number(rawAmt)) && Number(rawAmt) > 0 ? Number(rawAmt) : null;
+  const rawPlan = params.get('plan');
+  const planType = rawPlan && VALID_PLAN_TYPES.has(rawPlan) ? rawPlan as 'DISCOUNTED_10PCT' | 'MONTHLY_DOWNGRADE' : null;
+
   useEffect(() => {
-    fetch(`http://localhost:8080/api/v1/customer/invoice/${paymentId}`)
+    const controller = new AbortController();
+    fetch(`${API_CUSTOMER_URL}/invoice/${paymentId}`, { signal: controller.signal })
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         setEvent(data);
@@ -27,20 +37,32 @@ export const CustomerPaymentPortal: React.FC<CustomerPaymentPortalProps> = ({
         }
         setLoading(false);
       })
-      .catch(() => setLoading(false));
+      .catch((err) => {
+        if (err.name !== 'AbortError') setLoading(false);
+      });
+    return () => controller.abort();
   }, [paymentId]);
+
+  const displayAmount = overrideAmount ?? event?.amount ?? 0;
+  const originalAmount = event?.amount ?? 0;
+  const isDiscounted = planType === 'DISCOUNTED_10PCT' && overrideAmount !== null;
+  const isMonthly = planType === 'MONTHLY_DOWNGRADE' && overrideAmount !== null;
 
   const handleCompletePayment = async () => {
     setPaying(true);
     try {
-      const res = await fetch(`http://localhost:8080/api/v1/customer/resolve/${paymentId}`, {
+      const res = await fetch(`${API_CUSTOMER_URL}/resolve/${paymentId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ method: selectedMethod }),
+        body: JSON.stringify({ method: isDiscounted ? '10% Grace Discount' : isMonthly ? 'Monthly Downgrade' : selectedMethod }),
       });
       if (res.ok) {
         setPaymentSuccess(true);
+      } else {
+        console.error('Payment resolution failed:', res.status);
       }
+    } catch (err) {
+      console.error('Payment error:', err);
     } finally {
       setPaying(false);
     }
@@ -95,12 +117,12 @@ export const CustomerPaymentPortal: React.FC<CustomerPaymentPortalProps> = ({
 
         {paymentSuccess ? (
           <div className="p-8 text-center space-y-4">
-            <div className="h-16 w-16 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mx-auto border border-emerald-200 animate-in zoom-in">
+            <div className="h-16 w-16 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mx-auto border border-emerald-200 animate-zoom-in">
               <CheckCircle2 size={36} />
             </div>
             <h3 className="text-xl font-bold text-slate-900">Payment Completed Successfully!</h3>
             <p className="text-xs text-slate-500 max-w-sm mx-auto">
-              Your scheduled renewal of <strong>₹{event.amount}</strong> has been authorized. Your subscription is active with zero interruption.
+              Your scheduled renewal of <strong>₹{displayAmount.toFixed(2)}</strong> has been authorized. Your subscription is active with zero interruption.
             </p>
             <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs font-mono text-slate-700 text-left space-y-1">
               <div>Ref ID: <span className="font-semibold text-slate-900">{event.paymentId}</span></div>
@@ -116,16 +138,38 @@ export const CustomerPaymentPortal: React.FC<CustomerPaymentPortalProps> = ({
           </div>
         ) : (
           <div className="p-6 md:p-8 space-y-6">
+            {/* Plan Badge */}
+            {isDiscounted && (
+              <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 flex items-center gap-2.5 text-xs text-emerald-800">
+                <Percent size={16} className="text-emerald-600 shrink-0" />
+                <span className="font-bold">10% Instant Grace Discount Applied</span>
+                <span className="ml-auto font-mono text-emerald-600">Save ₹{(originalAmount - displayAmount).toFixed(2)}</span>
+              </div>
+            )}
+            {isMonthly && (
+              <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-3 flex items-center gap-2.5 text-xs text-indigo-800">
+                <Calendar size={16} className="text-indigo-600 shrink-0" />
+                <span className="font-bold">Flexible Monthly Billing Plan</span>
+                <span className="ml-auto font-mono text-indigo-600">was ₹{originalAmount.toFixed(2)}/yr</span>
+              </div>
+            )}
+
             {/* Invoice Summary */}
             <div className="flex justify-between items-center pb-4 border-b border-slate-100">
               <div>
                 <span className="text-xs text-slate-400 font-mono">Invoice #{event.paymentId.substring(4)}</span>
-                <h3 className="text-lg font-bold text-slate-900">Subscription Renewal</h3>
+                <h3 className="text-lg font-bold text-slate-900">
+                  {isMonthly ? 'Monthly Subscription Renewal' : 'Subscription Renewal'}
+                </h3>
                 <p className="text-xs text-slate-500">{event.customerEmail}</p>
               </div>
               <div className="text-right">
                 <span className="text-xs text-slate-400">Total Due</span>
-                <div className="text-2xl font-black text-slate-950">₹{event.amount}</div>
+                {isDiscounted && (
+                  <div className="text-sm text-slate-400 line-through font-mono">₹{originalAmount.toFixed(2)}</div>
+                )}
+                <div className="text-2xl font-black text-slate-950">₹{displayAmount.toFixed(2)}</div>
+                {isMonthly && <div className="text-xs text-slate-400">/month</div>}
               </div>
             </div>
 
@@ -173,7 +217,7 @@ export const CustomerPaymentPortal: React.FC<CustomerPaymentPortalProps> = ({
               ) : (
                 <>
                   <Lock size={15} />
-                  Authorize & Pay ₹{event.amount} Securely
+                  Authorize & Pay ₹{displayAmount.toFixed(2)} Securely
                 </>
               )}
             </button>

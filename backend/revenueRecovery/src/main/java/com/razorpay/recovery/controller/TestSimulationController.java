@@ -3,6 +3,7 @@ package com.razorpay.recovery.controller;
 import com.razorpay.recovery.service.DunningRecoveryService;
 import com.razorpay.recovery.service.WebhookDlqService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.annotation.Profile;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -12,7 +13,7 @@ import java.util.concurrent.ThreadLocalRandom;
 @RestController
 @RequestMapping("/api/v1/test")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "*")
+@Profile("dev")
 public class TestSimulationController {
 
     private final WebhookDlqService webhookDlqService;

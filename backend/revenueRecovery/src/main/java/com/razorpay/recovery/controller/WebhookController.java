@@ -14,7 +14,6 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/v1/webhook")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "*")
 public class WebhookController {
 
     private final DunningRecoveryService dunningRecoveryService;
@@ -31,12 +30,14 @@ public class WebhookController {
     ) {
         log.info("Received Razorpay webhook dispatch.");
 
-        // 1. Verify HMAC-SHA256 signature if secret is configured
-        if (webhookSecret != null && !webhookSecret.isBlank() && !webhookSecret.equalsIgnoreCase("dummy_secret")) {
-            if (signature == null || !signatureVerifier.verifyWebhookSignature(payload, signature, webhookSecret)) {
-                log.error("Webhook HMAC signature validation failed!");
-                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Invalid signature");
-            }
+        if (webhookSecret == null || webhookSecret.isBlank()) {
+            log.error("Webhook secret not configured. Rejecting webhook for security.");
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Webhook secret not configured");
+        }
+
+        if (signature == null || !signatureVerifier.verifyWebhookSignature(payload, signature, webhookSecret)) {
+            log.error("Webhook HMAC signature validation failed!");
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Invalid signature");
         }
 
         String eventType = "UNKNOWN";
@@ -66,9 +67,8 @@ public class WebhookController {
 
             return ResponseEntity.ok("Event processed successfully");
         } catch (Exception e) {
-            log.error("Exception in webhook pipeline. Capturing payload to Dead-Letter Queue (DLQ): {}", e.getMessage(), e);
+            log.error("Exception in webhook pipeline. Capturing payload to DLQ: {}", e.getMessage(), e);
             webhookDlqService.captureFailedWebhook(eventType, payload, e);
-            // Return 200/202 to Razorpay gateway to avoid unnecessary gateway flood while DLQ handles retries internally
             return ResponseEntity.status(HttpStatus.ACCEPTED).body("Payload queued in Dead-Letter Queue for retry");
         }
     }

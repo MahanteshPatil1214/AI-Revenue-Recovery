@@ -5,9 +5,10 @@ import type { DunningEvent } from '../types/recovery';
 interface EventListProps {
   events: DunningEvent[];
   onPreview: (event: DunningEvent) => void;
+  onOpenPortal: (paymentId: string) => void;
 }
 
-export const EventList: React.FC<EventListProps> = ({ events, onPreview }) => {
+export const EventList: React.FC<EventListProps> = ({ events, onPreview, onOpenPortal }) => {
   return (
     <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
       <div className="flex justify-between items-center mb-6">
@@ -27,8 +28,13 @@ export const EventList: React.FC<EventListProps> = ({ events, onPreview }) => {
             <p className="text-xs mt-1 text-slate-400">Click the simulation buttons above or trigger a Razorpay webhook.</p>
           </div>
         ) : (
-          events.map((ev, index) => (
-            <EventCard key={ev.id || index} event={ev} onPreview={onPreview} />
+          events.map((event) => (
+            <EventCard
+              key={event.paymentId}
+              event={event}
+              onPreview={onPreview}
+              onOpenPortal={onOpenPortal}
+            />
           ))
         )}
       </div>
