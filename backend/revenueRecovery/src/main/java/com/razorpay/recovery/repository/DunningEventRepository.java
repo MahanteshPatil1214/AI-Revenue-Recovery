@@ -7,6 +7,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -20,6 +21,8 @@ public interface DunningEventRepository extends JpaRepository<DunningEvent, Long
     List<DunningEvent> findTop100ByOrderByCreatedAtDesc();
 
     List<DunningEvent> findByStatusAndNextRetryAtLessThanEqualOrderByNextRetryAtAsc(String status, Instant timestamp);
+
+    List<DunningEvent> findByStatusIn(Collection<String> statuses);
 
     // Dynamic count of total events for a bank rail in a time window
     @Query("SELECT COUNT(e) FROM DunningEvent e WHERE (UPPER(e.errorCode) LIKE %:bank% OR UPPER(e.errorReason) LIKE %:bank%) AND e.createdAt >= :since")

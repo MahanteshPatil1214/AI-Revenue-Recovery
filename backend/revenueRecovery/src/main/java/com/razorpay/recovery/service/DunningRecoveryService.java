@@ -31,7 +31,7 @@ public class DunningRecoveryService {
 
     private final Map<String, Boolean> activeLocks = new ConcurrentHashMap<>();
 
-    private final RazorpayClient razorpayClient;
+    private volatile RazorpayClient razorpayClient;
 
     @Value("${razorpay.key.id}")
     private String keyId;
@@ -45,7 +45,21 @@ public class DunningRecoveryService {
         this.eventRepository = eventRepository;
         this.notificationService = notificationService;
         this.smartTimingEngine = smartTimingEngine;
-        this.razorpayClient = new RazorpayClient(keyId, keySecret);
+    }
+
+    private RazorpayClient getRazorpayClient() {
+        if (razorpayClient == null) {
+            synchronized (this) {
+                if (razorpayClient == null) {
+                    try {
+                        razorpayClient = new RazorpayClient(keyId, keySecret);
+                    } catch (Exception e) {
+                        throw new IllegalStateException("Failed to initialise Razorpay client", e);
+                    }
+                }
+            }
+        }
+        return razorpayClient;
     }
 
     @Async
@@ -172,7 +186,7 @@ public class DunningRecoveryService {
             req.put("notify", notify);
             req.put("reminder_enable", true);
 
-            PaymentLink link = razorpayClient.paymentLink.create(req);
+            PaymentLink link = getRazorpayClient().paymentLink.create(req);
             return link.get("short_url");
         } catch (Exception ex) {
             log.warn("Razorpay API call failed (likely test credentials): {}", ex.getMessage());
@@ -196,5 +210,29 @@ public class DunningRecoveryService {
         }, () -> {
             log.warn("Captured payment {} was not previously flagged in dunning registry. No state change required.", paymentId);
         });
+    }
+
+    /**
+     * Queries Razorpay's Payments API for the real-time status of a payment.
+     * Returns true if the payment has reached a terminal captured/settled state.
+     *
+     * In environments with test credentials (where the API call will fail), this
+     * falls back to false so reconciliation does not mark payments settled
+     * without authoritative confirmation.
+     */
+    public boolean isPaymentSettledOnGateway(String paymentId, String amountPaise) {
+        try {
+            com.razorpay.Payment payment = getRazorpayClient().payments.fetch(paymentId);
+            if (payment == null) {
+                return false;
+            }
+            String status = payment.get("status");
+            return "captured".equalsIgnoreCase(status)
+                    || "authorized".equalsIgnoreCase(status)
+                    || "refunded".equalsIgnoreCase(status);
+        } catch (Exception e) {
+            log.info("Unable to fetch Razorpay status for {} (likely test credentials): {}", paymentId, e.getMessage());
+            return false;
+        }
     }
 }

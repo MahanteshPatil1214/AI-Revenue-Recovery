@@ -19,7 +19,7 @@ import java.util.List;
 public class WebhookDlqService {
 
     private final WebhookDlqRepository dlqRepository;
-    private final DunningRecoveryService dunningRecoveryService;
+    private final WebhookIngestionService ingestionService;
 
     @Transactional
     public void captureFailedWebhook(String eventType, String payload, Exception exception) {
@@ -68,8 +68,10 @@ public class WebhookDlqService {
         log.info("DLQ Worker: Attempting re-execution {}/{} for DLQ Record #{}", currentAttempt, item.getMaxRetries(), item.getId());
 
         try {
-            // Re-dispatching to main dunning parser
-            dunningRecoveryService.processWebhookPayloadAsync(item.getRawPayload());
+            // Re-dispatch through the authoritative ingestion pipeline so both
+            // payment.failed and payment.captured/payment_link.paid retry safely.
+            String eventType = item.getEventType();
+            ingestionService.process(eventType, item.getRawPayload());
             item.setStatus("RESOLVED");
             item.setNextRetryAt(null);
             log.info("DLQ Record #{} recovered and processed successfully.", item.getId());
