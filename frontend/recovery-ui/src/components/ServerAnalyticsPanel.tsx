@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { BarChart3, BadgeIndianRupee, TrendingUp, Users } from 'lucide-react';
-import { API_ANALYTICS_URL } from '../config/api';
+import { API_ANALYTICS_URL, adminHeaders } from '../config/api';
 import type { ServerAnalytics } from '../types/recovery';
 
 const STRATEGY_LABELS: Record<string, string> = {
@@ -25,7 +25,7 @@ export const ServerAnalyticsPanel: React.FC = () => {
 
   const load = useCallback(async () => {
     try {
-      const res = await fetch(`${API_ANALYTICS_URL}`);
+      const res = await fetch(`${API_ANALYTICS_URL}`, { headers: adminHeaders });
       if (!res.ok) throw new Error('Analytics unavailable');
       const data: ServerAnalytics = await res.json();
       setAnalytics(data);

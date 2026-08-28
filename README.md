@@ -34,7 +34,7 @@ When a recurring subscription payment fails, the engine autonomously decides how
 1. **Ingests** Razorpay webhooks (`payment.failed`, `payment.captured`, `payment_link.paid`) over HTTP with strict **HMAC-SHA256 signature verification** (constant-time comparison).
 2. **Classifies** the failure code into *soft/transient* vs. *hard/permanent* categories.
 3. **Recovers** via two deterministic strategies:
-   - **Soft errors** (`GATEWAY_*`, `*_TIMEOUT`, `SERVER_ERROR`, `BANK_DOWNTIME`) → bounded exponential-backoff retry scheduler (**max 3 retries**, 15s → 30s → 60s with 0–5 s jitter).
+   - **Soft errors** (`GATEWAY_*`, `*_TIMEOUT`, `SERVER_ERROR`, `BANK_DOWNTIME`) → smart-retry scheduler driven by a **bank-health radar** + **timing engine** (**max 3 retries**, radar-aware backoff, circuit-breaker hold during outages, pre-retry settlement re-check).
    - **Hard errors** (`INSUFFICIENT_FUNDS`, `EXPIRED_CARD`, `AUTHENTICATION_FAILED`, …) → autonomous escalation to a **Razorpay Payment Link** (UPI/Cards/Netbanking supported) + multi-channel dunning notifications (HTML email + SMS/WhatsApp).
 4. **Settles** recovered revenue by listening for `payment.captured` / `payment_link.paid` webhooks or a customer one-click checkout resolution, then marks the event `RECOVERED_CUSTOMER_PAID`.
 5. **Guards** every path with two-tier idempotency, a deterministic event lifecycle, a **dead-letter queue (DLQ)** with automated backoff reprocessing, and real-time **Server-Sent Events (SSE)** streaming to an operations dashboard.
@@ -159,9 +159,11 @@ Terminal dunning states: `RECOVERED_RETRY_SUCCESS`, `RECOVERED_ACTION_TAKEN`, `R
 | Mechanism | Implementation |
 |---|---|
 | **Webhook signature verification** | HMAC-SHA256 over the raw payload using `Razorpay-Webhook-Secret`; digest compared to the `X-Razorpay-Signature` header via constant-time `MessageDigest.isEqual`. Invalid/missing signatures → `401 Unauthorized`. |
-| **Idempotency (two tiers)** | ① Per-JVM `ConcurrentHashMap.putIfAbsent(paymentId)` blocks concurrent async duplicates; ② `existsByPaymentId` DB check backed by a UNIQUE column drops redelivered events. |
+| **Idempotency (two tiers)** | ① Per-JVM `ConcurrentHashMap.putIfAbsent(paymentId)` blocks concurrent async duplicates; ② `existsByPaymentId` DB check backed by a UNIQUE column drops redelivered events. Settlement webhooks are additionally idempotent (terminal-state guard) so duplicate/out-of-order `payment.captured`/`payment_link.paid` deliveries are safe. |
 | **Dead-Letter Queue** | Any exception during webhook processing is captured to `webhook_dlq_events` (`RETRY_PENDING`). A 20-second reprocessor replays them with exponential backoff (30s initial → 60s → 120s); after 3 failed attempts the payload parks in `DEAD_LETTER` for inspection. The ingest endpoint returns `202 Accepted` (not an error) so Razorpay doesn't re-flood while the DLQ owns the retry. |
 | **Bounded retries** | Both the dunning retry loop (max 3) and the DLQ reprocessor (max 3) are strictly bounded — no infinite loops. |
+| **Durable webhook audit trail** | Every inbound webhook is written to `webhook_event_log` (its own commit) **before** processing, so no payload is lost even if the JVM crashes mid-work; enables DLQ debugging and reconciliation. |
+| **Settlement reconciliation** | `GET /api/v1/admin/reconcile` scans awaiting-settlement events and queries the Razorpay Payments API for real-time status, closing the gap when a customer pays but closes the tab before the webhook lands. |
 | **Async offloading** | Webhook parsing/classification and all notifications run via `@Async`, keeping HTTP threads free. |
 | **Non-blocking notifications** | Mail sender is injected optionally (`@Autowired(required=false)`) — the app boots cleanly even with mail disabled/misconfigured. |
 | **Graceful degradation** | Payment-link creation falls back to a synthetic URL when Razorpay credentials are absent, keeping the full pipeline demonstrable offline. |
@@ -176,7 +178,7 @@ Terminal dunning states: `RECOVERED_RETRY_SUCCESS`, `RECOVERED_ACTION_TAKEN`, `R
 |---|---|
 | Runtime | Java 21 |
 | Framework | Spring Boot 3.2.5 (Web, Data JPA, Mail) |
-| Database | PostgreSQL (+ Hibernate `ddl-auto=update`; Flyway migration script included but currently disabled) |
+| Database | PostgreSQL (versioned by **Flyway**: `V1` schema, `V2` webhook tables, `V3` smart-retry telemetry) + Hibernate `ddl-auto=validate` |
 | Payments | Razorpay Java SDK 1.4.6 (Payment Links API) |
 | Config secrets | dotenv-java 3.0.0 (loads `.env` at startup) |
 | Boilerplate | Lombok |
@@ -269,6 +271,18 @@ Base URL: `http://localhost:8080`
 | `GET` | `/api/v1/customer/invoice/{paymentId}` | Fetch a single dunning event (invoice view). |
 | `POST` | `/api/v1/customer/resolve/{paymentId}` | Mark invoice paid from the checkout portal. Body (optional): `{"method":"UPI"}` (also `CARD`, `NETBANKING`). Sets `RECOVERED_CUSTOMER_PAID` and broadcasts. |
 
+#### Management, radar & analytics  *(requires `X-Admin-Key` when `ADMIN_API_KEY` is set)*
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/v1/admin/analytics` | Authoritative recovered-MRR & churn observability from the full persisted registry: total value at risk, recovered value, recovery rates (count + value), per-strategy INR split, and a daily churn-cohort funnel. |
+| `GET` | `/api/v1/admin/analytics/export?format=csv` | Server-side CSV download of the same summary + strategy split + cohorts (`recovery_report_<date>.csv`) for BI/ops ingestion. |
+| `GET` | `/api/v1/admin/reconcile` | Runs settlement reconciliation: scans awaiting-settlement events and syncs any that already settled on Razorpay (closed-tab safety net). |
+| `GET` | `/api/v1/radar/status` | Bank-health radar report (per-rail status, failure rate, sample count). |
+| `POST` | `/api/v1/radar/simulate-outage?bank=HDFC&rate=75.0` | Inject a simulated outage/degraded rail for the demo. |
+| `POST` | `/api/v1/radar/restore?bank=HDFC` | Clear the simulated override and return to live telemetry. |
+
+> **Auth gate:** all `/api/v1/admin/**`, `/api/v1/radar/**` and `/api/v1/test/**` endpoints are guarded by `AdminAuthInterceptor`, which requires the `X-Admin-Key` header to match `ADMIN_API_KEY`. When `ADMIN_API_KEY` is blank the gate is open (local-dev convenience) — **always set it in non-local environments**.
+
 #### Simulation & benchmark harness
 | Method | Endpoint | Description |
 |---|---|---|
@@ -281,8 +295,8 @@ Base URL: `http://localhost:8080`
 
 | Job | Cadence | Behavior |
 |---|---|---|
-| `SmartRetryScheduler.executePendingRetries` | every 10 s | Executes due `SCHEDULED` soft-fail retries; ~70% simulated success; backoff 15/30/60 s (+0–5 s jitter); escalates after 3 attempts. |
-| `WebhookDlqService.processDlqRetries` | every 20 s | Replays `RETRY_PENDING` webhooks; backoff 30s → 60s → 120s; parks in `DEAD_LETTER` after 3 failed attempts. |
+| `SmartRetryScheduler.executePendingRetries` | every 10 s | Executes due `SCHEDULED` soft-fail retries. Each attempt: settlement re-check → radar circuit-breaker hold (bank outage, no attempt consumed) → real gateway re-charge (dev/test simulated, radar-aware) → reschedule via timing engine (liquidity window / degraded jitter / exponential backoff) → escalate after exhausting the budget. |
+| `WebhookDlqService.processDlqRetries` | every 20 s | Replays `RETRY_PENDING` webhooks (routed through the ingestion pipeline so settled webhooks retry too); backoff 30s → 60s → 120s; parks in `DEAD_LETTER` after 3 failed attempts. |
 | `processWebhookPayloadAsync` | on demand (@Async) | Parses webhook, idempotency gate, classify, persist, notify, broadcast. |
 | `NotificationServiceImpl.sendEmail/Sms` | on demand (@Async) | Non-blocking multi-channel dunning dispatch. |
 
@@ -301,9 +315,19 @@ Base URL: `http://localhost:8080`
 | `reasoning_trace` | VARCHAR(1000) | Human-readable audit trail shown as "⚡ Agent Trace" in the UI |
 | `recovery_url` | VARCHAR | Razorpay Payment Link short URL |
 | `status` | VARCHAR | `SCHEDULED`, `RECOVERED_ACTION_TAKEN`, `RECOVERED_RETRY_SUCCESS`, `RECOVERED_CUSTOMER_PAID` |
+| `bank_code` | VARCHAR | Normalized acquiring rail (`HDFC`, `SBI`, `ICICI`, `AXIS`, `KOTAK`, `UPI`) for radar telemetry + smart timing |
 | `retry_count`, `max_retries` | INT | Defaults 0 / 3 |
 | `next_retry_at` | TIMESTAMPTZ | Composite-indexed with `status` for the scheduler query |
+| `last_retry_at` | TIMESTAMPTZ | Timestamp of the most recent retry attempt (telemetry) |
 | `created_at` | TIMESTAMPTZ | |
+
+**`webhook_event_log`** (entity `WebhookEventLog`)
+| Column | Notes |
+|---|---|
+| `id`, `event_type`, `payment_id` | Indexed for reconciliation / DLQ debugging |
+| `raw_payload` (TEXT), `processing_note` (TEXT) | Full body captured before processing |
+| `status` | `RECEIVED` → processed state |
+| `created_at`, `processed_at` | Audit timestamps |
 
 **`webhook_dlq_events`** (entity `WebhookDlqEvent`)
 | Column | Notes |
@@ -321,7 +345,8 @@ All settings are environment-overridable. A `.env` file in `backend/revenueRecov
 |---|---|---|
 | `RAZORPAY_KEY_ID` | placeholder test key | Razorpay API key (Payment Links) |
 | `RAZORPAY_KEY_SECRET` | placeholder secret | Razorpay API secret |
-| `RAZORPAY_WEBHOOK_SECRET` | placeholder secret | HMAC verification secret. Verification is skipped only if blank/`dummy_secret` (dev convenience). |
+| `RAZORPAY_WEBHOOK_SECRET` | placeholder secret | HMAC verification secret. Verification is always enforced; if blank the webhook is rejected. |
+| `ADMIN_API_KEY` | blank | Operator/management API key required in the `X-Admin-Key` header for `/api/v1/admin/**`, `/api/v1/radar/**`, `/api/v1/test/**`. Blank = gate open (local dev). |
 | `DB_URL` | `jdbc:postgresql://localhost:5432/revenue_recovery` | PostgreSQL JDBC URL |
 | `DB_USER` / `DB_PASS` | `postgres` / `postgres` | DB credentials |
 | `MAIL_ENABLED` | `false` | When `false`, emails are logged as `[SIMULATION EMAIL DISPATCH]` instead of sent |
@@ -330,13 +355,13 @@ All settings are environment-overridable. A `.env` file in `backend/revenueRecov
 | `MAIL_FROM` | `billing@recoveryengine.io` | Sender address |
 | `TWILIO_ENABLED` | `false` | SMS/WhatsApp are always log-simulated in this version |
 
-Other notable properties: `server.port=8080`, `spring.jpa.hibernate.ddl-auto=update` (schema auto-created; Flyway dependency + `V1__init_recovery_events_schema.sql` exist but `spring.flyway.enabled=false`), CORS allowed origins `http://localhost:5173` and `http://localhost:3000`.
+Other notable properties: `server.port=8080`, `spring.jpa.hibernate.ddl-auto=validate` (Flyway owns schema creation/migration via `classpath:db/migrations`; `ddl-auto=validate` fails startup on any entity/schema drift), CORS allowed origins `http://localhost:5173` and `http://localhost:3000`. Dev-only controllers (`/test`, `/radar`) are `@Profile("dev")` and enabled via `SPRING_PROFILES_ACTIVE=dev`.
 
 ---
 
 ## Frontend Reference
 
-Single-page operations console ("Razorpay AI Revenue Recovery Engine"), dev-served on **port 5173**, talking to the hardcoded backend origin `http://localhost:8080`.
+Single-page operations console ("Razorpay AI Revenue Recovery Engine"), dev-served on **port 5173**, talking to the backend origin configured via `VITE_API_BASE_URL` (default `http://localhost:8080`).
 
 ### Dashboard sections
 
@@ -346,6 +371,7 @@ Single-page operations console ("Razorpay AI Revenue Recovery Engine"), dev-serv
 4. **Live Event Stream** — scrollable feed of event cards showing payment ID, email, timestamp, color-coded category chip, amount, spinning "Attempt n/3" badge while a retry is pending, strategy label, and the **⚡ Agent Trace** reasoning audit line. Recovered-via-retry cards get a green banner; escalated cards show their clickable payment link, an "Email Dispatched" badge, and a **Preview** button that renders the exact customer-facing dunning email in a modal.
 5. **Batch Benchmark Banner** — dismissible summary of batch runs: size, escalated-to-links count, backoff-queued count, total volume ₹, processing latency.
 6. **Customer Payment Portal** — full-screen simulated Razorpay checkout: loads the invoice, shows the decline reason, offers UPI / Card / Netbanking selection, authorizes payment via the resolve endpoint, then displays an animated success receipt ("SETTLED — LIVE BROADCASTED") that also flips live on the ops dashboard via SSE.
+7. **Server Analytics Panel (Recovered MRR & Churn Cohorts)** — fetches `GET /api/v1/admin/analytics` (with `X-Admin-Key` when `VITE_ADMIN_API_KEY` is set) every 15 s and renders the authoritative recovered value, recovery rates, still-at-risk exposure, the monetary split by recovery channel (Smart Retry vs Customer Discount / 1-Click Checkout vs Settlement Webhook vs Payment Link), and the daily churn-cohort funnel — a server-computed complement to the client-side live panel.
 
 ### Data flow
 
@@ -370,7 +396,7 @@ Single-page operations console ("Razorpay AI Revenue Recovery Engine"), dev-serv
 CREATE DATABASE revenue_recovery;
 ```
 
-(Default schema creation is automatic via Hibernate `ddl-auto=update`.)
+(Schema is created and versioned automatically by **Flyway** on first boot; Hibernate runs in `ddl-auto=validate` to catch any drift against the migrations.)
 
 ### 2. Configure the backend
 
@@ -385,6 +411,9 @@ DB_USER=postgres
 DB_PASS=postgres
 MAIL_ENABLED=false
 MAIL_FROM=billing@yourcompany.io
+# Set to a strong value to enable the X-Admin-Key gate on operator endpoints
+# (/api/v1/admin/**, /api/v1/radar/**, /api/v1/test/**). Blank = gate open.
+# ADMIN_API_KEY=change-me
 ```
 
 > The app runs fully without Razorpay/mail credentials — payment links fall back to synthetic URLs and emails are logged as simulations.
@@ -418,7 +447,7 @@ Click **Hard Fail** in the header — within seconds you'll see the event classi
 
 | Scenario | Try this | Expected behavior |
 |---|---|---|
-| Soft failure auto-retry | Click **Soft Fail** | Card appears with amber `TRANSIENT_SOFT_FAIL` chip + spinning "Attempt 1/3". Within ~15–75 s it flips green (`RECOVERED_RETRY_SUCCESS`) or exhausts and escalates to a payment link. |
+| Soft failure auto-retry | Click **Soft Fail** | Card appears with amber `TRANSIENT_SOFT_FAIL` chip + spinning "Attempt 1/3". Within seconds (radar-aware scheduling) it flips green (`RECOVERED_RETRY_SUCCESS`) or exhausts and escalates to a payment link; you can also `POST /api/v1/radar/simulate-outage` to watch the circuit-breaker hold. |
 | Hard failure escalation | Click **Hard Fail** | Rose chip, immediate payment-link generation, "Email Dispatched" badge, **Preview** shows the exact HTML dunning email. |
 | Batch benchmark | Click **Run 50-Event Batch** | Banner reports throughput, split between escalations and queued backoffs, and total ₹ processed. |
 | Settlement webhook | `POST /api/v1/test/simulate-capture?paymentId=<id>` | Card transitions to `RECOVERED_CUSTOMER_PAID`. |
@@ -433,22 +462,25 @@ Click **Hard Fail** in the header — within seconds you'll see the event classi
 - [x] Architecture design
 - [x] Webhook ingestion with HMAC-SHA256 verification
 - [x] Failure classifier (soft/hard)
-- [x] Smart exponential-backoff retry scheduler
+- [x] Smart radar/timing-engine-driven retry scheduler (bank outage circuit-breaker, settlement re-check, radar-aware backoff)
 - [x] Razorpay Payment Link escalation
 - [x] Multi-channel dunning notifications (HTML email live; SMS/WhatsApp simulated)
-- [x] PostgreSQL persistence + SSE state hydration
-- [x] Dead-letter queue with automated backoff reprocessing
-- [x] `payment.captured` / `payment_link.paid` settlement pipeline
+- [x] PostgreSQL persistence + Flyway-versioned schema (`V1`/`V2`/`V3`) with `ddl-auto=validate`
+- [x] Dead-letter queue with automated backoff reprocessing (routed through the ingestion pipeline)
+- [x] `payment.captured` / `payment_link.paid` settlement pipeline (idempotent)
+- [x] Durable webhook audit trail (`webhook_event_log`) + settlement reconciliation endpoint
 - [x] Customer one-click resolution portal
-- [x] React real-time dashboard (KPIs, analytics, agent traces, email preview)
-- [x] Batch benchmark harness + CSV financial audit export
-- [ ] Production hardening (auth on management endpoints, externalized frontend API URL, CI pipeline)
+- [x] React real-time dashboard (KPIs, live + server analytics, agent traces, email preview)
+- [x] Batch benchmark harness + CSV financial audit export + server-side analytics/export
+- [x] API-key auth on management/radar/test endpoints
+- [x] Externalized frontend API URL (`VITE_API_BASE_URL`)
+- [ ] CI pipeline (GitHub Actions)
 - [ ] Real SMS/WhatsApp delivery (Twilio integration stubbed)
 
 ## Known Limitations
 
-- **Simulation semantics**: retry outcomes are ~70% randomly successful, and SMS/WhatsApp dispatches are console logs only — by design for demo determinism.
-- **No authentication** on API endpoints; intended for local/demo use behind a trusted network.
-- **Hardcoded backend origin** (`http://localhost:8080`) inside frontend sources — swap for `import.meta.env.VITE_API_URL` before deploying.
-- **Flyway disabled**: schema drift is handled by Hibernate `ddl-auto=update`; the migration script exists for future enablement.
+- **Simulation semantics**: with non-live Razorpay credentials (typical dev/test), retry outcomes use a radar-aware simulated model and SMS/WhatsApp dispatches are console logs only — by design for demo determinism. In production with real credentials, retries issue real gateway re-charges.
+- **API-key auth is lightweight**: management endpoints are gated by a single shared `X-Admin-Key` header (constant-time compared), not per-user authN/authZ — sufficient for operator tools behind a trusted network.
+- **Frontend admin key is a build-time env var** (`VITE_ADMIN_API_KEY`); use an API gateway/proxy to keep the key out of the browser bundle in stricter deployments.
+- **No CI pipeline** yet (GitHub Actions) — backend `mvn verify`, frontend build, and the Flyway migration check are run manually.
 - **No formal circuit breaker library** — resilience comes from bounded retries + the DLQ pattern.
