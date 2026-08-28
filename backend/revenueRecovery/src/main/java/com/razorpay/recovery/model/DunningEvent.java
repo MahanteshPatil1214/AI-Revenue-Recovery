@@ -30,6 +30,12 @@ public class DunningEvent {
     private String errorCode;
     private String errorReason;
 
+    // Normalized acquiring rail (HDFC, SBI, ICICI, AXIS, KOTAK, UPI). Enables
+    // radar telemetry and smart-timing without re-parsing the error_code suffix.
+    private String bankCode;
+
+    private Instant lastRetryAt;
+
     @Enumerated(EnumType.STRING)
     private FailureCategory category;
 

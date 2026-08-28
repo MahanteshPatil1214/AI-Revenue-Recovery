@@ -22,6 +22,10 @@ public interface DunningEventRepository extends JpaRepository<DunningEvent, Long
 
     List<DunningEvent> findByStatusAndNextRetryAtLessThanEqualOrderByNextRetryAtAsc(String status, Instant timestamp);
 
+    // Scheduled events with no window yet (or an already-expired window) are due now.
+    @Query("SELECT e FROM DunningEvent e WHERE e.status = :status AND (e.nextRetryAt IS NULL OR e.nextRetryAt <= :now) ORDER BY e.createdAt ASC")
+    List<DunningEvent> findDueScheduledByStatus(@Param("status") String status, @Param("now") Instant now);
+
     List<DunningEvent> findByStatusIn(Collection<String> statuses);
 
     // Dynamic count of total events for a bank rail in a time window

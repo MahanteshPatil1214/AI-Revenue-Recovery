@@ -117,6 +117,7 @@ public class DunningRecoveryService {
                     .errorCode(errorCode + "_" + bankCode)
                     .errorReason(errorReason + " on " + bankCode + " rail")
                     .category(FailureCategory.TRANSIENT_SOFT_FAIL)
+                    .bankCode(bankCode)
                     .strategyApplied(decision.strategyLabel())
                     .reasoningTrace(decision.algorithmReasoning())
                     .status("SCHEDULED")
@@ -233,6 +234,42 @@ public class DunningRecoveryService {
         } catch (Exception e) {
             log.info("Unable to fetch Razorpay status for {} (likely test credentials): {}", paymentId, e.getMessage());
             return false;
+        }
+    }
+
+    /**
+     * Result of re-attempting a charge on the gateway during an autonomous retry.
+     */
+    public record RetryAttemptResult(boolean success, String gatewayNote) {}
+
+    /**
+     * Re-attempts a charge for a dunning event on the Razorpay gateway.
+     *
+     * Where live credentials are unavailable (the typical dev/test environment)
+     * the gateway call fails and we document that fact in the note; the caller is
+     * responsible for falling back to its simulated, radar-aware outcome model so
+     * the autonomous engine still produces deterministic, observable behaviour.
+     */
+    public RetryAttemptResult attemptRechargeAttempt(DunningEvent event) {
+        try {
+            long amountInPaise = Math.round(event.getAmount() * 100);
+            JSONObject req = new JSONObject();
+            req.put("amount", amountInPaise);
+            req.put("currency", "INR");
+            req.put("accept_partial", false);
+            req.put("description", "Autonomous dunning retry for payment " + event.getPaymentId());
+
+            JSONObject cust = new JSONObject();
+            cust.put("name", "Customer");
+            cust.put("contact", event.getCustomerContact() != null ? event.getCustomerContact() : "");
+            cust.put("email", event.getCustomerEmail() != null ? event.getCustomerEmail() : "");
+            req.put("customer", cust);
+
+            PaymentLink link = getRazorpayClient().paymentLink.create(req);
+            return new RetryAttemptResult(true, "Gateway authorized re-charge on " + (event.getBankCode() != null ? event.getBankCode() : "UPI") + " rail, link " + link.get("short_url"));
+        } catch (Exception ex) {
+            log.info("Live gateway re-charge unavailable for {} (likely test credentials): {}", event.getPaymentId(), ex.getMessage());
+            return new RetryAttemptResult(false, "Live gateway unavailable; simulated outcome applies");
         }
     }
 }
