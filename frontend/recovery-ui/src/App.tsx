@@ -3,6 +3,7 @@ import { Header } from './components/Header';
 import { BenchmarkBanner } from './components/BenchmarkBanner';
 import { KpiGrid } from './components/KpiGrid';
 import { AnalyticsPanel } from './components/AnalyticsPanel';
+import { ServerAnalyticsPanel } from './components/ServerAnalyticsPanel';
 import { BankRadarBanner } from './components/BankRadarBanner';
 import { EventList } from './components/EventList';
 import { NotificationPreviewModal } from './components/NotificationPreviewModal';
@@ -144,6 +145,8 @@ export default function App() {
       />
 
       <BankRadarBanner />
+
+      <ServerAnalyticsPanel />
 
       <AnalyticsPanel events={events} />
 

@@ -5,3 +5,4 @@ export const API_STREAM_URL = `${BASE}/api/v1/stream`;
 export const API_CUSTOMER_URL = `${BASE}/api/v1/customer`;
 export const API_RADAR_URL = `${BASE}/api/v1/radar`;
 export const API_TEST_URL = `${BASE}/api/v1/test`;
+export const API_ANALYTICS_URL = `${BASE}/api/v1/admin/analytics`;

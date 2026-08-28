@@ -41,3 +41,28 @@ export interface BenchmarkReport {
   processingDurationMs: number;
   throughputEventsPerSec: number;
 }
+
+export interface StrategyBreakdown {
+  strategy: string;
+  count: number;
+  recoveredValue: number;
+}
+
+export interface CohortPoint {
+  cohortDay: string;
+  total: number;
+  totalValue: number;
+  recovered: number;
+  recoveredValue: number;
+}
+
+export interface ServerAnalytics {
+  totalEvents: number;
+  totalValueAtRisk: number;
+  totalRecovered: number;
+  totalRecoveredValue: number;
+  recoveryRatePercent: number;
+  valueRecoveryRatePercent: number;
+  strategyBreakdown: StrategyBreakdown[];
+  churnCohorts: CohortPoint[];
+}

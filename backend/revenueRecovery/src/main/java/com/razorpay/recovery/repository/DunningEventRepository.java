@@ -36,4 +36,31 @@ public interface DunningEventRepository extends JpaRepository<DunningEvent, Long
     @Query("SELECT COUNT(e) FROM DunningEvent e WHERE (UPPER(e.errorCode) LIKE %:bank% OR UPPER(e.errorReason) LIKE %:bank%) AND e.category = com.razorpay.recovery.model.FailureCategory.TRANSIENT_SOFT_FAIL AND e.createdAt >= :since")
     long countBankFailuresSince(@Param("bank") String bank, @Param("since") Instant since);
 
+    // -- Financial analytics / churn cohorts ------------------------------------
+
+    long countByStatusIn(Collection<String> statuses);
+
+    @Query("SELECT COALESCE(SUM(e.amount), 0) FROM DunningEvent e WHERE e.status IN :statuses")
+    double sumAmountByStatuses(@Param("statuses") Collection<String> statuses);
+
+    @Query("SELECT COALESCE(SUM(e.amount), 0) FROM DunningEvent e")
+    double sumAllAmount();
+
+    long count();
+
+    // Recovered value + count grouped by the recovery strategy that closed the event.
+    @Query("SELECT e.strategyApplied AS strategy, COUNT(e) AS cnt, COALESCE(SUM(e.amount), 0) AS amt " +
+            "FROM DunningEvent e WHERE e.status IN :recovered GROUP BY e.strategyApplied ORDER BY amt DESC")
+    List<Object[]> aggregateByStrategyForStatuses(@Param("recovered") Collection<String> recovered);
+
+    // Daily churn funnel: total events -> value grouped by the (server) day the failure hit.
+    @Query("SELECT CAST(e.createdAt AS date) AS cohortDay, COUNT(e) AS cnt, COALESCE(SUM(e.amount), 0) AS amt " +
+            "FROM DunningEvent e GROUP BY CAST(e.createdAt AS date) ORDER BY cohortDay ASC")
+    List<Object[]> cohortSeriesAll();
+
+    // Per-day recovery funnel already closed (recovered) within that cohort day.
+    @Query("SELECT CAST(e.createdAt AS date) AS cohortDay, COUNT(e) AS cnt, COALESCE(SUM(e.amount), 0) AS amt " +
+            "FROM DunningEvent e WHERE e.status IN :recovered GROUP BY CAST(e.createdAt AS date) ORDER BY cohortDay ASC")
+    List<Object[]> cohortSeriesRecovered(@Param("recovered") Collection<String> recovered);
+
 }
