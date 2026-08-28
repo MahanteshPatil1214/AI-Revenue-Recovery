@@ -474,7 +474,8 @@ Click **Hard Fail** in the header — within seconds you'll see the event classi
 - [x] Batch benchmark harness + CSV financial audit export + server-side analytics/export
 - [x] API-key auth on management/radar/test endpoints
 - [x] Externalized frontend API URL (`VITE_API_BASE_URL`)
-- [ ] CI pipeline (GitHub Actions)
+- [x] Unit test coverage (retry engine, timing/radar, analytics, webhook HMAC, auth gate)
+- [x] CI pipeline (GitHub Actions): backend `mvn verify` (Java 21) + frontend typecheck/build
 - [ ] Real SMS/WhatsApp delivery (Twilio integration stubbed)
 
 ## Known Limitations
@@ -482,5 +483,4 @@ Click **Hard Fail** in the header — within seconds you'll see the event classi
 - **Simulation semantics**: with non-live Razorpay credentials (typical dev/test), retry outcomes use a radar-aware simulated model and SMS/WhatsApp dispatches are console logs only — by design for demo determinism. In production with real credentials, retries issue real gateway re-charges.
 - **API-key auth is lightweight**: management endpoints are gated by a single shared `X-Admin-Key` header (constant-time compared), not per-user authN/authZ — sufficient for operator tools behind a trusted network.
 - **Frontend admin key is a build-time env var** (`VITE_ADMIN_API_KEY`); use an API gateway/proxy to keep the key out of the browser bundle in stricter deployments.
-- **No CI pipeline** yet (GitHub Actions) — backend `mvn verify`, frontend build, and the Flyway migration check are run manually.
 - **No formal circuit breaker library** — resilience comes from bounded retries + the DLQ pattern.
