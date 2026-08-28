@@ -1,5 +1,6 @@
 package com.razorpay.recovery.service.impl;
 
+import com.razorpay.recovery.service.EvolutionApiService;
 import com.razorpay.recovery.service.NotificationService;
 import jakarta.mail.internet.MimeMessage;
 import org.slf4j.Logger;
@@ -26,6 +27,12 @@ public class NotificationServiceImpl implements NotificationService {
 
     @Autowired(required = false)
     private JavaMailSender mailSender;
+
+    @Value("${evolution.enabled:false}")
+    private boolean evolutionEnabled;
+
+    @Autowired(required = false)
+    private EvolutionApiService evolutionApiService;
 
     @Override
     @Async
@@ -90,6 +97,14 @@ public class NotificationServiceImpl implements NotificationService {
                 failureReason != null ? failureReason : "Bank decline",
                 paymentLink
         );
+
+        if (evolutionEnabled && evolutionApiService != null) {
+            boolean sent = evolutionApiService.sendText(customerPhone, message);
+            if (sent) {
+                return;
+            }
+            log.warn("Evolution API dispatch unavailable/failed for {}. Falling back to simulation.", customerPhone);
+        }
 
         log.info("[SIMULATION SMS/WHATSAPP DISPATCH] To: {} | Message: {}", customerPhone, message);
     }

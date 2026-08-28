@@ -110,7 +110,7 @@ Fires immediately on classification — no waiting:
   - `notify: { sms: true, email: true }`, auto-reminders enabled
   - Description: `Payment Recovery for Inv #<paymentId>`
 - Stores the resulting `short_url` in `recoveryUrl`.
-- Dispatches a styled **HTML dunning email** (subject: *"Action Required: Complete your subscription renewal"*) with a secure CTA button, plus an SMS/WhatsApp notification (currently log-simulated).
+- Dispatches a styled **HTML dunning email** (subject: *"Action Required: Complete your subscription renewal"*) with a secure CTA button, plus an SMS/WhatsApp notification (through the open-source **Evolution API** WhatsApp gateway when configured; log-simulated otherwise).
 - If the Razorpay call fails, a synthetic fallback link is generated so demos keep working end-to-end.
 
 ### Settlement paths
@@ -353,7 +353,11 @@ All settings are environment-overridable. A `.env` file in `backend/revenueRecov
 | `MAIL_HOST` / `MAIL_PORT` | `smtp.gmail.com` / `587` | SMTP server (STARTTLS + auth enabled) |
 | `MAIL_USERNAME` / `MAIL_PASSWORD` | empty | SMTP credentials |
 | `MAIL_FROM` | `billing@recoveryengine.io` | Sender address |
-| `TWILIO_ENABLED` | `false` | SMS/WhatsApp are always log-simulated in this version |
+| `EVOLUTION_ENABLED` | `false` | When `false`, WhatsApp messages are logged as `[SIMULATION SMS/WHATSAPP DISPATCH]` |
+| `EVOLUTION_BASE_URL` | `http://localhost:8080` | Base URL of the self-hosted Evolution API gateway |
+| `EVOLUTION_API_KEY` | empty | Global gateway API key (used if no instance token) |
+| `EVOLUTION_INSTANCE_NAME` | `recovery-engine` | Connected gateway instance name |
+| `EVOLUTION_INSTANCE_TOKEN` | empty | Per-instance API key (overrides global key when set) |
 
 Other notable properties: `server.port=8080`, `spring.jpa.hibernate.ddl-auto=validate` (Flyway owns schema creation/migration via `classpath:db/migrations`; `ddl-auto=validate` fails startup on any entity/schema drift), CORS allowed origins `http://localhost:5173` and `http://localhost:3000`. Dev-only controllers (`/test`, `/radar`) are `@Profile("dev")` and enabled via `SPRING_PROFILES_ACTIVE=dev`.
 
@@ -464,7 +468,7 @@ Click **Hard Fail** in the header — within seconds you'll see the event classi
 - [x] Failure classifier (soft/hard)
 - [x] Smart radar/timing-engine-driven retry scheduler (bank outage circuit-breaker, settlement re-check, radar-aware backoff)
 - [x] Razorpay Payment Link escalation
-- [x] Multi-channel dunning notifications (HTML email live; SMS/WhatsApp simulated)
+- [x] Multi-channel dunning notifications (HTML email live; WhatsApp via open-source Evolution API gateway with console-simulation fallback)
 - [x] PostgreSQL persistence + Flyway-versioned schema (`V1`/`V2`/`V3`) with `ddl-auto=validate`
 - [x] Dead-letter queue with automated backoff reprocessing (routed through the ingestion pipeline)
 - [x] `payment.captured` / `payment_link.paid` settlement pipeline (idempotent)
@@ -476,11 +480,11 @@ Click **Hard Fail** in the header — within seconds you'll see the event classi
 - [x] Externalized frontend API URL (`VITE_API_BASE_URL`)
 - [x] Unit test coverage (retry engine, timing/radar, analytics, webhook HMAC, auth gate)
 - [x] CI pipeline (GitHub Actions): backend `mvn verify` (Java 21) + frontend typecheck/build
-- [ ] Real SMS/WhatsApp delivery (Twilio integration stubbed)
+- [x] WhatsApp delivery via open-source **Evolution API** gateway (self-hosted, REST) with console-simulation fallback
 
 ## Known Limitations
 
-- **Simulation semantics**: with non-live Razorpay credentials (typical dev/test), retry outcomes use a radar-aware simulated model and SMS/WhatsApp dispatches are console logs only — by design for demo determinism. In production with real credentials, retries issue real gateway re-charges.
+- **Simulation semantics**: with non-live Razorpay credentials (typical dev/test), retry outcomes use a radar-aware simulated model and SMS/WhatsApp dispatches are console logs only unless an Evolution API gateway is configured (`EVOLUTION_ENABLED=true` + valid gateway/base URL) — by design for demo determinism. In production with real credentials, retries issue real gateway re-charges.
 - **API-key auth is lightweight**: management endpoints are gated by a single shared `X-Admin-Key` header (constant-time compared), not per-user authN/authZ — sufficient for operator tools behind a trusted network.
 - **Frontend admin key is a build-time env var** (`VITE_ADMIN_API_KEY`); use an API gateway/proxy to keep the key out of the browser bundle in stricter deployments.
 - **No formal circuit breaker library** — resilience comes from bounded retries + the DLQ pattern.
