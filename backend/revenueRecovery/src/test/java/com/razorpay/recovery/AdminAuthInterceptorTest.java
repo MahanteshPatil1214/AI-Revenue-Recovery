@@ -67,4 +67,10 @@ class AdminAuthInterceptorTest {
         when(request.getHeader("X-Admin-Key")).thenReturn("topsecret");
         assertThat(interceptor().preHandle(request, response, null)).isTrue();
     }
+
+    @Test
+    void letsCorsPreflightThroughWithoutKey() throws Exception {
+        when(request.getMethod()).thenReturn("OPTIONS");
+        assertThat(interceptor().preHandle(request, response, null)).isTrue();
+    }
 }

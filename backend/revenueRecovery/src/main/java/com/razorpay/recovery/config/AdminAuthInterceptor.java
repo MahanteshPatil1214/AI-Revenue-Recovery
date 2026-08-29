@@ -31,6 +31,12 @@ public class AdminAuthInterceptor implements HandlerInterceptor {
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler)
             throws Exception {
+        // Let CORS preflight (OPTIONS) through so the browser's preflight is answered
+        // by the CORS filter (with Access-Control-Allow-* headers), not rejected here.
+        if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
+            return true;
+        }
+
         if (adminApiKey == null || adminApiKey.isBlank()) {
             // No key configured -> gate open (local dev convenience).
             return true;
