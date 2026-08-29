@@ -1,5 +1,5 @@
 import React from 'react';
-import { Clock, Zap, Play } from 'lucide-react';
+import { Clock, Zap, Play, House } from 'lucide-react';
 
 interface HeaderProps {
   targetEmail: string;
@@ -7,6 +7,7 @@ interface HeaderProps {
   loadingSim: boolean;
   onSimulate: (type: 'SOFT' | 'HARD') => void;
   onBenchmark: () => void;
+  onGoHome?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -15,19 +16,31 @@ export const Header: React.FC<HeaderProps> = ({
   loadingSim,
   onSimulate,
   onBenchmark,
+  onGoHome,
 }) => {
   return (
     <header className="flex flex-col lg:flex-row justify-between items-start lg:items-center pb-6 border-b border-slate-200 gap-4">
-      <div>
-        <div className="flex items-center gap-2">
-          <span className="h-3 w-3 rounded-full bg-emerald-500 animate-pulse"></span>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-950">
-            Razorpay AI Revenue Recovery Engine
-          </h1>
+      <div className="flex items-center gap-3">
+        {onGoHome && (
+          <button
+            onClick={onGoHome}
+            title="Back to Overview"
+            className="h-9 w-9 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-600 hover:text-emerald-700 flex items-center justify-center shadow-sm transition"
+          >
+            <House size={16} />
+          </button>
+        )}
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="h-3 w-3 rounded-full bg-emerald-500 animate-pulse"></span>
+            <h1 className="text-2xl font-bold tracking-tight text-slate-950">
+              Razorpay AI Revenue Recovery Engine
+            </h1>
+          </div>
+          <p className="text-sm text-slate-500 mt-1">
+            Autonomous Failure Classifier, Smart-Dunning & Email Escalation
+          </p>
         </div>
-        <p className="text-sm text-slate-500 mt-1">
-          Autonomous Failure Classifier, Smart-Dunning & Email Escalation
-        </p>
       </div>
 
       <div className="flex flex-wrap items-center gap-2.5">
