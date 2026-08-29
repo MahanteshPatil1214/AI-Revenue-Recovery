@@ -9,7 +9,7 @@ import { EventList } from './components/EventList';
 import { NotificationPreviewModal } from './components/NotificationPreviewModal';
 import { CustomerPaymentPortal } from './components/CustomerPaymentPortal';
 import { RecoveryPortalModal } from './components/RecoveryPortalModal';
-import { API_STREAM_URL, API_TEST_URL } from './config/api';
+import { API_STREAM_URL, API_TEST_URL, adminHeaders } from './config/api';
 import { RECOVERED_STATUSES } from './types/recovery';
 import type { DunningEvent, BenchmarkReport } from './types/recovery';
 
@@ -73,7 +73,7 @@ export default function App() {
     try {
       const res = await fetch(
         `${API_TEST_URL}/simulate?type=${type}&email=${encodeURIComponent(targetEmail)}`,
-        { method: 'POST' }
+        { method: 'POST', headers: adminHeaders }
       );
       if (!res.ok) console.error('Simulation failed:', res.status);
     } catch (err) {
@@ -88,6 +88,7 @@ export default function App() {
     try {
       const res = await fetch(`${API_TEST_URL}/simulate-batch?totalEvents=50`, {
         method: 'POST',
+        headers: adminHeaders,
       });
       if (!res.ok) throw new Error('Benchmark failed');
       const data: BenchmarkReport = await res.json();

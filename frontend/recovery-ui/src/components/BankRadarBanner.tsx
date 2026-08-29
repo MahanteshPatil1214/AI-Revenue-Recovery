@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Radio, AlertTriangle, ShieldCheck } from 'lucide-react';
-import { API_RADAR_URL } from '../config/api';
+import { API_RADAR_URL, adminHeaders } from '../config/api';
 
 interface BankHealth {
   bankCode: string;
@@ -18,7 +18,7 @@ export const BankRadarBanner: React.FC = () => {
   selectedBankRef.current = selectedBank;
 
   const fetchRadar = useRef(() => {
-    fetch(`${API_RADAR_URL}/status`)
+    fetch(`${API_RADAR_URL}/status`, { headers: adminHeaders })
       .then((r) => {
         if (!r.ok) throw new Error('Failed to fetch radar');
         return r.json();
@@ -43,7 +43,7 @@ export const BankRadarBanner: React.FC = () => {
     try {
       await fetch(
         `${API_RADAR_URL}/simulate-outage?bank=${selectedBank}&rate=${failureRate}`,
-        { method: 'POST' }
+        { method: 'POST', headers: adminHeaders }
       );
       fetchRadar();
     } catch (err) {
@@ -56,7 +56,10 @@ export const BankRadarBanner: React.FC = () => {
   const restoreBank = async () => {
     setLoading(true);
     try {
-      await fetch(`${API_RADAR_URL}/restore?bank=${selectedBank}`, { method: 'POST' });
+      await fetch(`${API_RADAR_URL}/restore?bank=${selectedBank}`, {
+        method: 'POST',
+        headers: adminHeaders,
+      });
       fetchRadar();
     } catch (err) {
       console.error('Failed to restore bank:', err);
