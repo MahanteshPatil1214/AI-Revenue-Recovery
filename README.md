@@ -354,7 +354,7 @@ All settings are environment-overridable. A `.env` file in `backend/revenueRecov
 | `MAIL_USERNAME` / `MAIL_PASSWORD` | empty | SMTP credentials |
 | `MAIL_FROM` | `billing@recoveryengine.io` | Sender address |
 | `EVOLUTION_ENABLED` | `false` | When `false`, WhatsApp messages are logged as `[SIMULATION SMS/WHATSAPP DISPATCH]` |
-| `EVOLUTION_BASE_URL` | `http://localhost:8080` | Base URL of the self-hosted Evolution API gateway |
+| `EVOLUTION_BASE_URL` | `http://localhost:9090` | Base URL of the self-hosted Evolution API gateway |
 | `EVOLUTION_API_KEY` | empty | Global gateway API key (used if no instance token) |
 | `EVOLUTION_INSTANCE_NAME` | `recovery-engine` | Connected gateway instance name |
 | `EVOLUTION_INSTANCE_TOKEN` | empty | Per-instance API key (overrides global key when set) |
@@ -368,13 +368,13 @@ The open-source Evolution API gateway runs alongside the app to send real WhatsA
 ```bash
 cd evolution
 cp .env.example .env      # set EVOLUTION_AUTH_KEY to a long random secret
-docker compose up -d      # gateway on http://localhost:8080
+docker compose up -d      # gateway on http://localhost:9090
 ```
 
 Then create + pair a WhatsApp instance (Baileys, free):
 
 ```bash
-curl -X POST http://localhost:8080/instance/create \
+curl -X POST http://localhost:9090/instance/create \
   -H "apikey: <EVOLUTION_AUTH_KEY>" \
   -H "Content-Type: application/json" \
   -d '{"instanceName":"recovery-engine","integration":"WHATSAPP-BAILEYS","qrcode":true,"token":"<instance-token>"}'
@@ -384,7 +384,7 @@ Scan the returned QR with WhatsApp → **Settings ▸ Linked devices ▸ Link a 
 
 ```
 EVOLUTION_ENABLED=true
-EVOLUTION_BASE_URL=http://localhost:8080
+EVOLUTION_BASE_URL=http://localhost:9090
 EVOLUTION_API_KEY=<EVOLUTION_AUTH_KEY>
 EVOLUTION_INSTANCE_NAME=recovery-engine
 EVOLUTION_INSTANCE_TOKEN=<instance-token>
