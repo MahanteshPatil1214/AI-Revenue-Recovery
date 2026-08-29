@@ -1,0 +1,6 @@
+# Local secrets & pairing artifacts — never commit
+.env
+.env.*
+!.env.example
+*.png
+whatsapp-qr.*

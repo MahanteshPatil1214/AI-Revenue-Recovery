@@ -73,7 +73,7 @@ class EvolutionApiServiceTest {
         @SuppressWarnings("unchecked")
         Map<String, Object> payload = (Map<String, Object>) bodyCaptor.getValue().getBody();
         assertThat(payload).containsEntry("number", "919000000000");
-        assertThat(payload).containsKey("textMessage");
+        assertThat(payload).containsEntry("text", "Hello, complete your payment here");
     }
 
     @Test

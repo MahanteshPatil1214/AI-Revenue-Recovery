@@ -72,12 +72,9 @@ public class EvolutionApiService {
             return false;
         }
 
-        Map<String, Object> textMessage = new LinkedHashMap<>();
-        textMessage.put("text", text);
-
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("number", cleanNumber);
-        body.put("textMessage", textMessage);
+        body.put("text", text);
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);

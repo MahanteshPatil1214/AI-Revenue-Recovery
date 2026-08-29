@@ -361,6 +361,37 @@ All settings are environment-overridable. A `.env` file in `backend/revenueRecov
 
 Other notable properties: `server.port=8080`, `spring.jpa.hibernate.ddl-auto=validate` (Flyway owns schema creation/migration via `classpath:db/migrations`; `ddl-auto=validate` fails startup on any entity/schema drift), CORS allowed origins `http://localhost:5173` and `http://localhost:3000`. Dev-only controllers (`/test`, `/radar`) are `@Profile("dev")` and enabled via `SPRING_PROFILES_ACTIVE=dev`.
 
+### Running the Evolution API WhatsApp gateway (optional, local)
+
+The open-source Evolution API gateway runs alongside the app to send real WhatsApp dunning messages. A Docker Compose stack is provided in `evolution/docker-compose.yml` (gateway + PostgreSQL + Redis):
+
+```bash
+cd evolution
+cp .env.example .env      # set EVOLUTION_AUTH_KEY to a long random secret
+docker compose up -d      # gateway on http://localhost:8080
+```
+
+Then create + pair a WhatsApp instance (Baileys, free):
+
+```bash
+curl -X POST http://localhost:8080/instance/create \
+  -H "apikey: <EVOLUTION_AUTH_KEY>" \
+  -H "Content-Type: application/json" \
+  -d '{"instanceName":"recovery-engine","integration":"WHATSAPP-BAILEYS","qrcode":true,"token":"<instance-token>"}'
+```
+
+Scan the returned QR with WhatsApp → **Settings ▸ Linked devices ▸ Link a device**. Finally point the backend at it (in `backend/revenueRecovery/.env`, which is gitignored):
+
+```
+EVOLUTION_ENABLED=true
+EVOLUTION_BASE_URL=http://localhost:8080
+EVOLUTION_API_KEY=<EVOLUTION_AUTH_KEY>
+EVOLUTION_INSTANCE_NAME=recovery-engine
+EVOLUTION_INSTANCE_TOKEN=<instance-token>
+```
+
+When `EVOLUTION_ENABLED=true` and the instance is configured, `sendSmsOrWhatsAppRecovery` dispatches a real WhatsApp message; otherwise it logs `[SIMULATION SMS/WHATSAPP DISPATCH]`. Note the gateway's Baileys/WhatsApp-Web pairing is against WhatsApp's terms — fine for testing, but for high-volume production use the WhatsApp Cloud API variant (which Meta charges for).
+
 ---
 
 ## Frontend Reference
