@@ -1,5 +1,5 @@
 import React from 'react';
-import { Clock, Zap, Play, House } from 'lucide-react';
+import { Clock, Zap, Play, Home } from 'lucide-react';
 
 interface HeaderProps {
   targetEmail: string;
@@ -27,7 +27,7 @@ export const Header: React.FC<HeaderProps> = ({
             title="Back to Overview"
             className="h-9 w-9 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-600 hover:text-emerald-700 flex items-center justify-center shadow-sm transition"
           >
-            <House size={16} />
+            <Home size={16} />
           </button>
         )}
         <div>
