@@ -188,12 +188,10 @@ Terminal dunning states: `RECOVERED_RETRY_SUCCESS`, `RECOVERED_ACTION_TAKEN`, `R
 
 | Layer | Technology |
 |---|---|
-| Framework | React 19 + TypeScript (Vite 8) |
+| Framework | React 18.3 + TypeScript (Vite 8) |
 | Styling | Tailwind CSS v4 (CSS-first config via `@tailwindcss/vite`) |
 | Icons | lucide-react |
 | Realtime | Native `EventSource` (SSE) |
-
-> Note: `package.json` declares older React/Vite/Tailwind versions than what the lockfile installs; the installed set (React 19 / Vite 8 / Tailwind 4) is what actually runs.
 
 ---
 
@@ -233,15 +231,19 @@ revenue recovery/
 ├── frontend/
 │   └── recovery-ui/                    # React ops dashboard
 │       └── src/
-│           ├── App.tsx                 # Root page: history fetch + SSE subscription + upsert logic
+│           ├── App.tsx                 # Root: landing state + tabs + history fetch + SSE subscription + upsert logic
 │           ├── components/
-│           │   ├── Header.tsx                    # Title bar + soft/hard/batch simulators
-│           │   ├── KpiGrid.tsx                   # Failed payments · interventions · salvaged ₹
-│           │   ├── AnalyticsPanel.tsx            # Recovery %, cohort bars, top triggers, CSV export
+│           │   ├── Landing.tsx                  # Entry landing page telling the project story
+│           │   ├── Header.tsx                  # Title bar + home button + soft/hard/batch simulators
+│           │   ├── KpiGrid.tsx                 # Failed payments · interventions · salvaged ₹
+│           │   ├── AnalyticsPanel.tsx          # Recovery %, cohort bars, top triggers, CSV export
+│           │   ├── ServerAnalyticsPanel.tsx    # Recovered MRR + churn cohort funnel (server-computed)
+│           │   ├── BankRadarBanner.tsx         # Bank-downtime radar with anomaly/restore controls
 │           │   ├── EventList.tsx / EventCard.tsx # Live feed w/ Agent Trace + retry badges
-│           │   ├── BenchmarkBanner.tsx           # Batch benchmark summary
-│           │   ├── NotificationPreviewModal.tsx  # Dunning email preview
-│           │   └── CustomerPaymentPortal.tsx     # Simulated Razorpay checkout (UPI/Card/Netbanking)
+│           │   ├── BenchmarkBanner.tsx         # Batch benchmark summary
+│           │   ├── NotificationPreviewModal.tsx # Dunning email preview
+│           │   ├── RecoveryPortalModal.tsx     # 1-click retention offers (grace discount / downgrade)
+│           │   └── CustomerPaymentPortal.tsx   # Simulated Razorpay checkout (UPI/Card/Netbanking)
 │           └── types/recovery.ts       # DunningEvent + BenchmarkReport interfaces
 └── README.md
 ```
@@ -398,15 +400,18 @@ When `EVOLUTION_ENABLED=true` and the instance is configured, `sendSmsOrWhatsApp
 
 Single-page operations console ("Razorpay AI Revenue Recovery Engine"), dev-served on **port 5173**, talking to the backend origin configured via `VITE_API_BASE_URL` (default `http://localhost:8080`).
 
+The app opens on a **landing page** that tells the project story (problem → pipeline → capabilities → tech stack) and acts as the entry point. Clicking **Open console** enters the control room, which is organized into **tabs** — Dashboard / Bank Radar / Analytics. A **home button** in the header returns to the landing page at any time.
+
 ### Dashboard sections
 
-1. **Header** — live status indicator plus simulation controls: target email input, **Soft Fail** and **Hard Fail** injectors, and a primary **Run 50-Event Batch** benchmark button.
+1. **Header** — live status indicator, home button, and simulation controls: target email input, **Soft Fail** and **Hard Fail** injectors, and a primary **Run 50-Event Batch** benchmark button.
 2. **KPI Grid** — three cards: *Failed Payments Intercepted* (total events), *Autonomous Interventions* (recovered count), *Salvaged Revenue Pool* (sum of ₹ amounts recovered).
-3. **Live Analytics Panel** — overall recovery efficiency (% + progress bar with ₹ saved out of ₹ total), soft-vs-hard pipeline ratio stacked bar (queued backoffs vs. direct links), top failure triggers ranked by `error_code` frequency, and **Export Financial Audit CSV** (client-side CSV generation → `dunning_recovery_report_<date>.csv`, 13 audit columns).
-4. **Live Event Stream** — scrollable feed of event cards showing payment ID, email, timestamp, color-coded category chip, amount, spinning "Attempt n/3" badge while a retry is pending, strategy label, and the **⚡ Agent Trace** reasoning audit line. Recovered-via-retry cards get a green banner; escalated cards show their clickable payment link, an "Email Dispatched" badge, and a **Preview** button that renders the exact customer-facing dunning email in a modal.
-5. **Batch Benchmark Banner** — dismissible summary of batch runs: size, escalated-to-links count, backoff-queued count, total volume ₹, processing latency.
-6. **Customer Payment Portal** — full-screen simulated Razorpay checkout: loads the invoice, shows the decline reason, offers UPI / Card / Netbanking selection, authorizes payment via the resolve endpoint, then displays an animated success receipt ("SETTLED — LIVE BROADCASTED") that also flips live on the ops dashboard via SSE.
-7. **Server Analytics Panel (Recovered MRR & Churn Cohorts)** — fetches `GET /api/v1/admin/analytics` (with `X-Admin-Key` when `VITE_ADMIN_API_KEY` is set) every 15 s and renders the authoritative recovered value, recovery rates, still-at-risk exposure, the monetary split by recovery channel (Smart Retry vs Customer Discount / 1-Click Checkout vs Settlement Webhook vs Payment Link), and the daily churn-cohort funnel — a server-computed complement to the client-side live panel.
+3. **Bank Radar tab** — real-time banking-rails health monitor with per-rail status cards, a failure-rate slider, and **Apply Anomaly** / **Restore Rail** controls to exercise the live circuit-breaker.
+4. **Live Analytics Panel (Dashboard)** — overall recovery efficiency (% + progress bar with ₹ saved out of ₹ total), soft-vs-hard pipeline ratio stacked bar (queued backoffs vs. direct links), top failure triggers ranked by `error_code` frequency, and **Export Financial Audit CSV** (client-side CSV generation → `dunning_recovery_report_<date>.csv`, 13 audit columns).
+5. **Server Analytics Panel (Analytics tab)** — fetches `GET /api/v1/admin/analytics` (with `X-Admin-Key` when `VITE_ADMIN_API_KEY` is set) every 15 s and renders the authoritative recovered value, recovery rates, still-at-risk exposure, the monetary split by recovery channel (Smart Retry vs Customer Discount / 1-Click Checkout vs Settlement Webhook vs Payment Link), and the daily churn-cohort funnel — a server-computed complement to the client-side live panel.
+6. **Live Event Stream (Dashboard)** — scrollable feed of event cards showing payment ID, email, timestamp, color-coded category chip, amount, spinning "Attempt n/3" badge while a retry is pending, strategy label, and the **⚡ Agent Trace** reasoning audit line. Recovered-via-retry cards get a green banner; escalated cards show their clickable payment link, an "Email Dispatched" badge, and a **Preview** button that renders the exact customer-facing dunning email in a modal.
+7. **Batch Benchmark Banner** — dismissible summary of batch runs: size, escalated-to-links count, backoff-queued count, total volume ₹, processing latency.
+8. **Customer Payment Portal** — full-screen simulated Razorpay checkout: loads the invoice, shows the decline reason, offers UPI / Card / Netbanking selection, authorizes payment via the resolve endpoint, then displays an animated success receipt ("SETTLED — LIVE BROADCASTED") that also flips live on the ops dashboard via SSE.
 
 ### Data flow
 
@@ -480,6 +485,16 @@ Click **Hard Fail** in the header — within seconds you'll see the event classi
 
 ## Demo Walkthrough
 
+> **Presentation tip:** the app opens on the landing page, which tells the story for you. Open the console and narrate the three-act flow below — it maps directly to the on-screen tabs.
+
+| Act | Action | What the panel sees |
+|---|---|---|
+| 1 — Soft fail | Open **Bank Radar** tab, click **Soft Fail** in the header | The event is classified transient, scheduled with Gaussian-jittered timing, and auto-recovers via smart retry to a green `RECOVERED_RETRY_SUCCESS` card — with a Razorpay link available. |
+| 2 — Hard fail | Click **Hard Fail** | Immediate classification to `RECOVERED_ACTION_TAKEN`, a real Razorpay payment link generated, "Email Dispatched", and **Preview** shows the exact customer email. |
+| 3 — Analytics | Open **Analytics** tab | Recovered MRR, recovery rates, churn-cohort funnel, and salvage split by channel — live, server-computed. |
+
+For deeper scenarios (batch benchmark, DLQ resilience, customer checkout, audit export) see the table below.
+
 | Scenario | Try this | Expected behavior |
 |---|---|---|
 | Soft failure auto-retry | Click **Soft Fail** | Card appears with amber `TRANSIENT_SOFT_FAIL` chip + spinning "Attempt 1/3". Within seconds (radar-aware scheduling) it flips green (`RECOVERED_RETRY_SUCCESS`) or exhausts and escalates to a payment link; you can also `POST /api/v1/radar/simulate-outage` to watch the circuit-breaker hold. |
@@ -512,6 +527,8 @@ Click **Hard Fail** in the header — within seconds you'll see the event classi
 - [x] Unit test coverage (retry engine, timing/radar, analytics, webhook HMAC, auth gate)
 - [x] CI pipeline (GitHub Actions): backend `mvn verify` (Java 21) + frontend typecheck/build
 - [x] WhatsApp delivery via open-source **Evolution API** gateway (self-hosted, REST) with console-simulation fallback
+- [x] Landing page + tabbed control room (Dashboard / Bank Radar / Analytics) with home navigation
+- [x] Transient (soft) failures also receive a payable Razorpay recovery link alongside smart retry
 
 ## Known Limitations
 
