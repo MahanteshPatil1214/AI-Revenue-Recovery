@@ -33,6 +33,8 @@ export default function App() {
   const [portalPaymentId, setPortalPaymentId] = useState<string | null>(null);
   const [showLanding, setShowLanding] = useState(() => !new URLSearchParams(window.location.search).has('payId'));
   const [section, setSection] = useState<Section>('dashboard');
+  const [resettingDemo, setResettingDemo] = useState(false);
+  const [historyNonce, setHistoryNonce] = useState(0);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -56,7 +58,6 @@ export default function App() {
       });
 
     const eventSource = new EventSource(`${API_STREAM_URL}/events`);
-
     eventSource.addEventListener('recovery-event', (e) => {
       try {
         const incoming: DunningEvent = JSON.parse(e.data);
@@ -78,7 +79,7 @@ export default function App() {
       controller.abort();
       eventSource.close();
     };
-  }, []);
+  }, [historyNonce]);
 
   const runSimulation = useCallback(async (type: 'SOFT' | 'HARD') => {
     setLoadingSim(true);
@@ -109,6 +110,22 @@ export default function App() {
       console.error('Benchmark error:', err);
     } finally {
       setLoadingSim(false);
+    }
+  }, []);
+
+  const runResetDemo = useCallback(async () => {
+    setResettingDemo(true);
+    try {
+      const res = await fetch(`${API_TEST_URL}/reset-demo?seed=true`, {
+        method: 'POST',
+        headers: adminHeaders,
+      });
+      if (!res.ok) throw new Error('Reset failed');
+      setHistoryNonce((n) => n + 1);
+    } catch (err) {
+      console.error('Reset error:', err);
+    } finally {
+      setResettingDemo(false);
     }
   }, []);
 
@@ -148,6 +165,8 @@ export default function App() {
         loadingSim={loadingSim}
         onSimulate={runSimulation}
         onBenchmark={runBatchBenchmark}
+        onResetDemo={runResetDemo}
+        resettingDemo={resettingDemo}
         onGoHome={() => setShowLanding(true)}
       />
 
