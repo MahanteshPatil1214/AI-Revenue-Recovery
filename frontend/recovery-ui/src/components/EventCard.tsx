@@ -11,6 +11,7 @@ interface EventCardProps {
 export const EventCard: React.FC<EventCardProps> = React.memo(({ event, onPreview, onOpenPortal }) => {
   const isSoftScheduled = event.status === 'SCHEDULED' && event.category === 'TRANSIENT_SOFT_FAIL';
   const isRetryRecovered = event.status === 'RECOVERED_RETRY_SUCCESS';
+  const linkUrl = event.recoveryUrl || `http://localhost:5173/?payId=${event.paymentId}&amt=${event.amount}`;
 
   return (
     <div className="p-4 bg-slate-50 border border-slate-200 rounded-lg flex flex-col gap-2.5 transition hover:border-slate-300">
@@ -68,12 +69,12 @@ export const EventCard: React.FC<EventCardProps> = React.memo(({ event, onPrevie
           <CheckCircle2 size={15} className="text-emerald-600 shrink-0" />
           <span className="font-semibold">Razorpay Link:</span>
           <a
-            href={event.recoveryUrl || '#'}
+            href={linkUrl}
             target="_blank"
             rel="noreferrer"
             className="underline text-emerald-700 hover:text-emerald-800 font-semibold truncate max-w-xs"
           >
-            {event.recoveryUrl || 'Generated'}
+            {event.recoveryUrl || 'Open Payment'}
           </a>
         </div>
 

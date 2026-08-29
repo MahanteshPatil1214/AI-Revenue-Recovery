@@ -109,6 +109,8 @@ public class DunningRecoveryService {
         if (isTransient) {
             SmartTimingEngine.SchedulingDecision decision = smartTimingEngine.computeOptimalRetryWindow(errorCode, bankCode, 0);
 
+            String recoveryUrl = generatePaymentLink(payment.path("amount").asLong(), contact, email, paymentId);
+
             record = DunningEvent.builder()
                     .paymentId(paymentId)
                     .amount(amount)
@@ -124,6 +126,7 @@ public class DunningRecoveryService {
                     .retryCount(0)
                     .maxRetries(3)
                     .nextRetryAt(decision.scheduledTime())
+                    .recoveryUrl(recoveryUrl)
                     .createdAt(Instant.now())
                     .build();
         } else {
