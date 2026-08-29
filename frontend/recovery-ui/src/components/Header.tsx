@@ -1,5 +1,5 @@
 import React from 'react';
-import { Clock, Zap, Play, Home, RotateCcw } from 'lucide-react';
+import { Clock, Zap, Play, Home, RotateCcw, LogOut } from 'lucide-react';
 
 interface HeaderProps {
   targetEmail: string;
@@ -9,6 +9,7 @@ interface HeaderProps {
   onBenchmark: () => void;
   onResetDemo?: () => void;
   resettingDemo?: boolean;
+  onSignOut?: () => void;
   onGoHome?: () => void;
 }
 
@@ -20,6 +21,7 @@ export const Header: React.FC<HeaderProps> = ({
   onBenchmark,
   onResetDemo,
   resettingDemo,
+  onSignOut,
   onGoHome,
 }) => {
   return (
@@ -84,6 +86,15 @@ export const Header: React.FC<HeaderProps> = ({
             className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-xs font-semibold text-slate-600 border border-slate-200 rounded-lg shadow-sm transition disabled:opacity-50"
           >
             <RotateCcw size={14} className={resettingDemo ? 'animate-spin' : ''} /> Reset Demo
+          </button>
+        )}
+        {onSignOut && (
+          <button
+            onClick={onSignOut}
+            title="Sign out and return to login"
+            className="flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-rose-50 text-xs font-semibold text-slate-500 hover:text-rose-600 border border-slate-300 rounded-lg shadow-sm transition"
+          >
+            <LogOut size={14} /> Sign out
           </button>
         )}
       </div>

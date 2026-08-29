@@ -11,7 +11,8 @@ import { EventList } from './components/EventList';
 import { NotificationPreviewModal } from './components/NotificationPreviewModal';
 import { CustomerPaymentPortal } from './components/CustomerPaymentPortal';
 import { RecoveryPortalModal } from './components/RecoveryPortalModal';
-import { API_STREAM_URL, API_TEST_URL, adminHeaders } from './config/api';
+import { LoginScreen } from './components/LoginScreen';
+import { API_STREAM_URL, API_TEST_URL, adminHeaders, hasAdminKey, setAdminKey } from './config/api';
 import { RECOVERED_STATUSES } from './types/recovery';
 import type { DunningEvent, BenchmarkReport } from './types/recovery';
 
@@ -35,6 +36,7 @@ export default function App() {
   const [section, setSection] = useState<Section>('dashboard');
   const [resettingDemo, setResettingDemo] = useState(false);
   const [historyNonce, setHistoryNonce] = useState(0);
+  const [authenticated, setAuthenticated] = useState(() => hasAdminKey());
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -157,6 +159,10 @@ export default function App() {
     );
   }
 
+  if (!authenticated) {
+    return <LoginScreen onAuthenticated={() => setAuthenticated(true)} />;
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 p-6 md:p-10 font-sans">
       <Header
@@ -167,6 +173,10 @@ export default function App() {
         onBenchmark={runBatchBenchmark}
         onResetDemo={runResetDemo}
         resettingDemo={resettingDemo}
+        onSignOut={() => {
+          setAdminKey('');
+          setAuthenticated(false);
+        }}
         onGoHome={() => setShowLanding(true)}
       />
 
