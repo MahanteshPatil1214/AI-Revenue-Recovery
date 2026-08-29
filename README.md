@@ -430,6 +430,26 @@ The app opens on a **landing page** that tells the project story (problem → pi
 - **PostgreSQL 14+** running locally
 - **Node.js 18+** and npm
 
+### Fastest path: run everything in Docker
+
+The repo ships an all-in-one Compose stack (`backend` + nginx-served `frontend` + `Postgres`) in the root `docker-compose.yml`:
+
+```powershell
+cd <repo root>
+docker compose up --build -d
+```
+
+| Service | URL | Notes |
+|---|---|---|
+| Frontend (nginx) | http://localhost:3000 | Serves the built SPA and proxies `/api` → backend |
+| Backend | http://localhost:8080 | Spring Boot API (Flyway migrates `revenue_recovery` automatically) |
+| Postgres | localhost:5432 | Managed volume; created with the `revenue_recovery` database |
+
+- The build sets `VITE_API_BASE_URL=""` so the browser talks same-origin to nginx; no CORS needed.
+- Set `ADMIN_API_KEY` (and optionally `RAZORPAY_*`, `DB_PASS`) via an `.env` next to the compose file or in your shell.
+- The **Evolution API** WhatsApp gateway stays in its own stack (`evolution/docker-compose.yml`, port 9090); when it isn't running the app logs simulated messages, so the panel demo works out of the box.
+- Keep the local-dev path below when you want hot-reload for the demo (backends from IntelliJ, frontend from Vite).
+
 ### 1. Database setup
 
 ```sql
@@ -529,6 +549,8 @@ For deeper scenarios (batch benchmark, DLQ resilience, customer checkout, audit 
 - [x] WhatsApp delivery via open-source **Evolution API** gateway (self-hosted, REST) with console-simulation fallback
 - [x] Landing page + tabbed control room (Dashboard / Bank Radar / Analytics) with home navigation
 - [x] Transient (soft) failures also receive a payable Razorpay recovery link alongside smart retry
+- [x] Operator login gate (frontend sign-in validates against the backend; sign-out, key persisted) + one-click **Reset Demo** (clear + seed)
+- [x] All-in-one `docker-compose.yml` (backend + nginx frontend + Postgres), Dockerfiles for both apps
 
 ## Known Limitations
 

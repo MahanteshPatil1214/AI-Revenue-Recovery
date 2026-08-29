@@ -1,0 +1,69 @@
+# All-in-one AI Revenue Recovery Engine stack (backend + nginx-frontend + Postgres).
+# The Evolution API WhatsApp gateway stays separate in ./evolution (port 9090, its
+# own database) so the app falls back to simulation logging if it is not running.
+#
+#   docker compose up --build -d
+#   http://localhost:3000        # control room (via nginx, /api proxied to backend)
+#   http://localhost:8080        # backend direct (optional)
+#
+# Required secrets can be supplied via an .env file next to this compose file or
+# the shell (ADMIN_API_KEY, RAZORPAY_*, DB_PASS, EVOLUTION_ENABLED, ...).
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: recovery-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASS:-postgres}
+      POSTGRES_DB: revenue_recovery
+    volumes:
+      - recovery_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d revenue_recovery"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    ports:
+      # Exposed to mirror the local dev posture; remove if you don't need direct access.
+      - "5432:5432"
+
+  backend:
+    build: ./backend/revenueRecovery
+    image: revenue-recovery-backend:latest
+    container_name: recovery-backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_URL: jdbc:postgresql://db:5432/revenue_recovery
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASS: ${DB_PASS:-postgres}
+      ADMIN_API_KEY: ${ADMIN_API_KEY:-dev_admin_key_2026}
+      RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID:-rzp_test_samplekey123}
+      RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET:-sampleSecretKeyXYZ}
+      RAZORPAY_WEBHOOK_SECRET: ${RAZORPAY_WEBHOOK_SECRET:-sampleWebhookSecret456}
+      EVOLUTION_ENABLED: ${EVOLUTION_ENABLED:-false}
+      EVOLUTION_BASE_URL: ${EVOLUTION_BASE_URL:-http://evolution-api:8080}
+      EVOLUTION_API_KEY: ${EVOLUTION_API_KEY:-}
+      MAIL_ENABLED: ${MAIL_ENABLED:-false}
+      MAIL_HOST: ${MAIL_HOST:-smtp.gmail.com}
+      MAIL_USERNAME: ${MAIL_USERNAME:-}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+    ports:
+      - "8080:8080"
+
+  frontend:
+    build: ./frontend/recovery-ui
+    image: revenue-recovery-frontend:latest
+    container_name: recovery-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "3000:80"
+
+volumes:
+  recovery_pg:
