@@ -90,22 +90,16 @@ public class NotificationServiceImpl implements NotificationService {
         BigDecimal displayAmount = amount != null ? amount : BigDecimal.ZERO;
         String displayReason = (failureReason != null && !failureReason.isBlank()) ? failureReason : "Bank decline";
 
-        // Official branded dunning message. The sender identity shown on WhatsApp comes
-        // from the linked WhatsApp Business account / instance, not this text; keeping a
-        // clean header + footer makes the message read as a legitimate billing notice.
-        String header = "\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\n"
-                + "\u26a1 Razorpay Revenue Recovery";
+        // Clean, low-key billing notice. WhatsApp sender identity comes from the linked
+        // WhatsApp Business account / instance; the body stays short and factual so it
+        // reads like a legitimate payment reminder, not a marketing blast.
         String message = String.format(
-                "%s\n\n" +
-                "Hi %s,\n\n" +
-                "Your %s %.2f subscription renewal could not be processed.\n" +
-                "Reason: %s.\n\n" +
-                "No action is needed if this was resolved automatically. To pay securely " +
-                "now, open your secure payment link:\n%s\n\n" +
-                "This is an automated billing notice from your service provider. If you " +
-                "believe this is an error, contact support or reply STOP to opt out.\n" +
-                "\u2014 Razorpay Revenue Recovery \u2022 Billing & Payments",
-                header,
+                "\u2713 %s \u2014 payment declined\n\n" +
+                "Hi %s,\n" +
+                "Your %s %.2f renewal did not go through (%s).\n" +
+                "Pay securely here: %s\n\n" +
+                "Razorpay Revenue Recovery \u2022 Billing & Payments",
+                displayCurrency,
                 displayName,
                 displayCurrency,
                 displayAmount,
