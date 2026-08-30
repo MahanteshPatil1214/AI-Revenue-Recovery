@@ -24,6 +24,7 @@ A production-style **Autonomous Revenue Recovery & Smart Dunning Engine** for re
 - [Demo Walkthrough](#demo-walkthrough)
 - [Project Status](#project-status)
 - [Known Limitations](#known-limitations)
+- [Consequences & Lessons Learned](./consequences.md)
 
 ---
 
