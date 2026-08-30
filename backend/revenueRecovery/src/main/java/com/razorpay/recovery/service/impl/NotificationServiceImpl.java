@@ -94,15 +94,14 @@ public class NotificationServiceImpl implements NotificationService {
         // WhatsApp Business account / instance; the body stays short and factual so it
         // reads like a legitimate payment reminder, not a marketing blast.
         String message = String.format(
-                "\u2713 %s \u2014 payment declined\n\n" +
+                "Payment declined: %s %.2f\n\n" +
                 "Hi %s,\n" +
-                "Your %s %.2f renewal did not go through (%s).\n" +
+                "Your subscription renewal did not go through (%s).\n" +
                 "Pay securely here: %s\n\n" +
                 "Razorpay Revenue Recovery \u2022 Billing & Payments",
                 displayCurrency,
-                displayName,
-                displayCurrency,
                 displayAmount,
+                displayName,
                 displayReason,
                 paymentLink
         );

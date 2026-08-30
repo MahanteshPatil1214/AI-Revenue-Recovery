@@ -47,3 +47,25 @@ jobs:
 
       - name: Typecheck & build
         run: npm run build
+
+  docker:
+    name: Docker images & compose validation
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        context: [backend, frontend]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Docker Compose plugin
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y docker-compose-plugin
+
+      - name: Validate compose file (all-in-one stack)
+        run: docker compose config --quiet
+
+      - name: Validate containerized Dockerfile
+        working-directory: ${{ matrix.context == 'backend' && 'backend/revenueRecovery' || 'frontend/recovery-ui' }}
+        run: docker build -t recovery-${{ matrix.context }}:ci .

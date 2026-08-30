@@ -39,6 +39,17 @@
 
 
 		<!-- ========================================== -->
+		<!-- OPERABILITY / OBSERVABILITY -->
+		<!-- ========================================== -->
+
+		<!-- Spring Boot Actuator: /actuator/health & readiness probes for orchestration. -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-actuator</artifactId>
+		</dependency>
+
+
+		<!-- ========================================== -->
 		<!-- DATABASE -->
 		<!-- ========================================== -->
 
