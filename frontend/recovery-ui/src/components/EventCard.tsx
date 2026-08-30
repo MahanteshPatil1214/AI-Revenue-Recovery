@@ -1,5 +1,5 @@
 import React from 'react';
-import { CheckCircle2, Mail, RefreshCw, Sparkles } from 'lucide-react';
+import { CheckCircle2, Mail, MessageCircle, RefreshCw, Sparkles } from 'lucide-react';
 import type { DunningEvent } from '../types/recovery';
 
 interface EventCardProps {
@@ -81,6 +81,9 @@ export const EventCard: React.FC<EventCardProps> = React.memo(({ event, onPrevie
         <div className="flex items-center gap-1.5 shrink-0">
           <span className="bg-emerald-100 text-emerald-800 font-medium px-2 py-0.5 rounded text-[10px] flex items-center gap-1 border border-emerald-300">
             <Mail size={10} /> Email Dispatched
+          </span>
+          <span className="bg-emerald-100 text-emerald-800 font-medium px-2 py-0.5 rounded text-[10px] flex items-center gap-1 border border-emerald-300">
+            <MessageCircle size={10} /> WhatsApp Dispatched
           </span>
           <button
             type="button"
