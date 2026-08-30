@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Radio, AlertTriangle, ShieldCheck } from 'lucide-react';
 import { API_RADAR_URL, adminHeaders } from '../config/api';
+import { InfoTip } from './InfoTip';
 
 interface BankHealth {
   bankCode: string;
@@ -80,6 +81,11 @@ export const BankRadarBanner: React.FC = () => {
             <h3 className="text-sm font-bold tracking-wide flex items-center gap-2">
               <Radio size={16} className="text-emerald-400" />
               Real-Time Banking Rails Downtime Radar
+              <InfoTip
+                position="top"
+                title="Banking Rails Downtime Radar"
+                text="A live circuit-breaker that monitors payment-failure rate per bank. When a bank degrades or goes down, the engine automatically pauses retries to that rail and widens the dunning window instead of hammering a failing gateway."
+              />
             </h3>
             <p className="text-[11px] text-slate-400">
               AI predictive circuit breaker adjusts dunning windows dynamically
@@ -126,6 +132,10 @@ export const BankRadarBanner: React.FC = () => {
             className="text-[11px] font-semibold bg-rose-900/40 hover:bg-rose-900/60 text-rose-300 border border-rose-700/50 px-3 py-1.5 rounded transition flex items-center gap-1 disabled:opacity-50"
           >
             <AlertTriangle size={12} /> Apply Anomaly
+            <InfoTip
+              position="bottom"
+              text="Raise the selected bank's failure rate to simulate an outage. Watch the radar flip to OUTAGE and retries to that rail pause automatically."
+            />
           </button>
 
           <button
@@ -134,6 +144,10 @@ export const BankRadarBanner: React.FC = () => {
             className="text-[11px] font-semibold bg-emerald-900/40 hover:bg-emerald-900/60 text-emerald-300 border border-emerald-700/50 px-3 py-1.5 rounded transition flex items-center gap-1 disabled:opacity-50"
           >
             <ShieldCheck size={12} /> Restore Rail
+            <InfoTip
+              position="bottom"
+              text="Bring the selected bank back to OPERATIONAL so the circuit breaker reopens and normal retry scheduling resumes."
+            />
           </button>
         </div>
       </div>
@@ -172,6 +186,10 @@ export const BankRadarBanner: React.FC = () => {
               </div>
               <div className="mt-2 text-[11px] text-slate-400 font-mono">
                 Fail rate: <span className="font-bold text-white">{bank.failureRatePercent}%</span>
+                <InfoTip
+                  position="bottom"
+                  text="Rolling failure rate for this bank. ≥50% flags an outage, ≥20% flags degraded — above these the engine backs off retries to this rail."
+                />
               </div>
             </div>
           );

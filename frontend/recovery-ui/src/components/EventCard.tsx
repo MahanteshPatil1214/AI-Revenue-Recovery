@@ -1,6 +1,7 @@
 import React from 'react';
 import { CheckCircle2, Mail, MessageCircle, RefreshCw, Sparkles } from 'lucide-react';
 import type { DunningEvent } from '../types/recovery';
+import { InfoTip } from './InfoTip';
 
 interface EventCardProps {
   event: DunningEvent;
@@ -27,13 +28,17 @@ export const EventCard: React.FC<EventCardProps> = React.memo(({ event, onPrevie
 
       <div className="flex flex-wrap items-center gap-2">
         <span
-          className={`px-2 py-0.5 rounded text-[11px] font-bold border ${
+          className={`px-2 py-0.5 rounded text-[11px] font-bold border flex items-center gap-1 ${
             event.category === 'TRANSIENT_SOFT_FAIL'
               ? 'bg-amber-50 text-amber-800 border-amber-200'
               : 'bg-rose-50 text-rose-800 border-rose-200'
           }`}
         >
           {event.errorCode}
+          <InfoTip
+            position="bottom"
+            text="Razorpay error code that caused the payment to fail. Amber = transient/soft (retryable); red = hard decline (send a payment link)."
+          />
         </span>
         <span className="text-sm font-semibold text-slate-800">₹{event.amount}</span>
 
@@ -42,6 +47,10 @@ export const EventCard: React.FC<EventCardProps> = React.memo(({ event, onPrevie
           <span className="text-[11px] font-bold bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded flex items-center gap-1">
             <RefreshCw size={11} className={isSoftScheduled ? 'animate-spin' : ''} />
             Attempt {event.retryCount}/{event.maxRetries || 3}
+            <InfoTip
+              position="bottom"
+              text="This soft failure has been automatically retried by the smart retry scheduler, with exponential backoff tuned to the failure reason. Success is marked as recovered."
+            />
           </span>
         )}
 
@@ -81,9 +90,11 @@ export const EventCard: React.FC<EventCardProps> = React.memo(({ event, onPrevie
         <div className="flex items-center gap-1.5 shrink-0">
           <span className="bg-emerald-100 text-emerald-800 font-medium px-2 py-0.5 rounded text-[10px] flex items-center gap-1 border border-emerald-300">
             <Mail size={10} /> Email Dispatched
+            <InfoTip position="bottom" text="Automated dunning email sent with the secure payment link. Delivered via the SMTP integration on the backend." />
           </span>
           <span className="bg-emerald-100 text-emerald-800 font-medium px-2 py-0.5 rounded text-[10px] flex items-center gap-1 border border-emerald-300">
             <MessageCircle size={10} /> WhatsApp Dispatched
+            <InfoTip position="bottom" text="Branded WhatsApp notice delivered through the Evolution API gateway — the higher-open-rate channel for dunning." />
           </span>
           <button
             type="button"

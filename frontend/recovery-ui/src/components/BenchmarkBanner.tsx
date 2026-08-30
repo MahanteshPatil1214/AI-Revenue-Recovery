@@ -1,5 +1,6 @@
 import React from 'react';
 import type { BenchmarkReport } from '../types/recovery';
+import { InfoTip } from './InfoTip';
 
 interface BenchmarkBannerProps {
   report: BenchmarkReport | null;
@@ -21,15 +22,18 @@ export const BenchmarkBanner: React.FC<BenchmarkBannerProps> = ({ report, onDism
           </span>
           <span>
             • Escalated to Links: <strong className="text-emerald-700 font-bold">{report.hardFailuresEscalated}</strong>
+            <InfoTip position="top" text="Hard (permanent) failures that got an immediate Razorpay payment link. These typically convert fastest because the link removes all friction." />
           </span>
           <span>
             • Backoff Queued: <strong className="text-amber-700 font-bold">{report.softFailuresQueued}</strong>
+            <InfoTip position="top" text="Soft (transient) failures parked in a smart retry queue with backoff, instead of being retried immediately against a failing gateway." />
           </span>
           <span>
             • Total Volume: <strong className="text-slate-900 font-bold">₹{report.totalValueProcessed.toLocaleString()}</strong>
           </span>
           <span>
             • Latency: <strong className="text-blue-700">{report.processingDurationMs}ms</strong>
+            <InfoTip position="top" text="Wall-clock time the engine took to classify and route the entire batch — a rough throughput indicator." />
           </span>
         </div>
       </div>

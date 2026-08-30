@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { Download, PieChart, TrendingUp, CheckCircle, AlertCircle } from 'lucide-react';
 import type { DunningEvent } from '../types/recovery';
+import { InfoTip } from './InfoTip';
 
 interface AnalyticsPanelProps {
   events: DunningEvent[];
@@ -136,6 +137,10 @@ export const AnalyticsPanel: React.FC<AnalyticsPanelProps> = ({ events }) => {
         >
           <Download size={14} />
           Export Financial Audit CSV
+          <InfoTip
+            position="bottom"
+            text="Downloads a complete CSV of every intercepted payment, its failure reason, the strategy applied, and the final status — for a financial audit or reconciliation with your ledger."
+          />
         </button>
       </div>
 
@@ -143,7 +148,13 @@ export const AnalyticsPanel: React.FC<AnalyticsPanelProps> = ({ events }) => {
         {/* Metric 1: Recovery Success Rate */}
         <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex flex-col justify-between">
           <div className="flex justify-between items-center text-slate-500 text-xs">
-            <span className="font-semibold uppercase tracking-wider">Overall Recovery Efficiency</span>
+            <span className="font-semibold uppercase tracking-wider flex items-center gap-1.5">
+              Overall Recovery Efficiency
+              <InfoTip
+                title="Overall Recovery Efficiency"
+                text="Share of intercepted failed payments that were eventually collected. Computed as Recovered / Total failed. The headline measure of how much revenue the engine wins back."
+              />
+            </span>
             <TrendingUp size={16} className="text-emerald-600" />
           </div>
           <div className="my-3">
@@ -163,7 +174,14 @@ export const AnalyticsPanel: React.FC<AnalyticsPanelProps> = ({ events }) => {
         {/* Metric 2: Failure Category Distribution */}
         <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex flex-col justify-between">
           <div className="flex justify-between items-center text-slate-500 text-xs">
-            <span className="font-semibold uppercase tracking-wider">Failure Pipeline Ratio</span>
+            <span className="font-semibold uppercase tracking-wider flex items-center gap-1.5">
+              Failure Pipeline Ratio
+              <InfoTip
+                position="bottom"
+                title="Failure Pipeline Ratio"
+                text="Split of the two recovery tracks. Soft = transient failures (gateway/bank timeouts) worth a smart timed retry. Hard = permanent declines that get an immediate direct payment link."
+              />
+            </span>
             <AlertCircle size={16} className="text-amber-600" />
           </div>
           <div className="my-3 space-y-2">
@@ -191,7 +209,13 @@ export const AnalyticsPanel: React.FC<AnalyticsPanelProps> = ({ events }) => {
         {/* Metric 3: Top Error Causes Breakdown */}
         <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex flex-col justify-between">
           <div className="flex justify-between items-center text-slate-500 text-xs">
-            <span className="font-semibold uppercase tracking-wider">Top Failure Triggers</span>
+            <span className="font-semibold uppercase tracking-wider flex items-center gap-1.5">
+              Top Failure Triggers
+              <InfoTip
+                position="bottom"
+                text="Most frequent Razorpay error codes across intercepted failures. Grouping by error_code reveals which causes drive most churn and where smart retry is most effective."
+              />
+            </span>
             <CheckCircle size={16} className="text-blue-600" />
           </div>
           <div className="my-2 space-y-1.5 max-h-24 overflow-y-auto pr-1">

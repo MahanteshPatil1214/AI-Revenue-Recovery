@@ -1,5 +1,6 @@
 import React from 'react';
 import { Clock, Zap, Play, Home, RotateCcw, LogOut } from 'lucide-react';
+import { InfoTip } from './InfoTip';
 
 interface HeaderProps {
   targetEmail: string;
@@ -63,6 +64,10 @@ export const Header: React.FC<HeaderProps> = ({
           className="flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 text-xs font-semibold text-amber-700 border border-amber-300 rounded-lg shadow-sm transition disabled:opacity-50"
         >
           <Clock size={14} /> Soft Fail
+          <InfoTip
+            position="bottom"
+            text="Simulate a transient failure (gateway/bank timeout). The engine classifies it soft, enqueues a smart timed retry, and this shows the recovery path."
+          />
         </button>
         <button
           onClick={() => onSimulate('HARD')}
@@ -70,6 +75,10 @@ export const Header: React.FC<HeaderProps> = ({
           className="flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 text-xs font-semibold text-rose-700 border border-rose-300 rounded-lg shadow-sm transition disabled:opacity-50"
         >
           <Zap size={14} /> Hard Fail
+          <InfoTip
+            position="bottom"
+            text="Simulate a permanent decline. The engine skips retry and instantly generates a secure payment link to re-collect the amount."
+          />
         </button>
         <button
           onClick={onBenchmark}
@@ -77,6 +86,10 @@ export const Header: React.FC<HeaderProps> = ({
           className="flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-xs font-semibold text-white rounded-lg shadow-md shadow-blue-500/20 transition disabled:opacity-50"
         >
           <Play size={14} /> Run 50-Event Batch
+          <InfoTip
+            position="bottom"
+            text="Fire 50 synthetic failures at once to stress-test the pipeline and populate the analytics/csv with a realistic cohort."
+          />
         </button>
         {onResetDemo && (
           <button
