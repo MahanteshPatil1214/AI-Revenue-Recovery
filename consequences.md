@@ -88,3 +88,34 @@ Almost every consequence here is a **"works locally but not somewhere else"** fa
 - your machine vs. Docker Hub → registry/DNS flakiness
 
 The pattern: **make the "clean" environment the one you validate against.** CI, a fresh `npm ci`, a container build, and the actual running process are the truth. Local convenience state is the thing that lies.
+
+---
+
+## Why This Matters — Business Consequences of Getting It Wrong
+
+The engineering lessons above are the "how". This section is the **"why it matters"** — what is actually at stake when a recovery engine is built badly. These are the failure modes the whole system is designed to prevent.
+
+### 1. Inconsistent Financial State & Data Drift
+
+- **Unsettled database records** — If a user completes payment on Razorpay but closes the window before the client-side redirect finishes, the engine can permanently mark an invoice as *failed* or *pending recovery* even though the customer already paid.
+- **Double charges** — Without server-to-server confirmation, retry pipelines may attempt to charge a card the customer has already settled manually.
+- **Mismatched webhook reconciliation** — Bank-initiated refunds, chargebacks, and manual payment updates become impossible to reconcile reliably.
+
+### 2. Involuntary Customer Churn
+
+- **Unnecessary service cancellation** — Accounts get suspended over *transient* bank declines (server outages, temporary network limits) that would have succeeded silently on an automated background retry.
+- **Customer friction** — Demanding manual action for a temporary blip frustrates customers and pushes them to cancel.
+
+### 3. Revenue Leakage
+
+- **Unrecovered recoverable capital** — Standard manual payment collection typically loses **40–60%** of failed subscription renewals.
+- **High operational overhead** — Support and finance teams must manually trawl the Razorpay merchant dashboard to see who actually paid and who remains unbilled.
+
+### 4. Poor Retrial Timing & Gateway Penalties
+
+- **Card network blocking** — Rapid, blind retries against hard-declined cards (stolen, expired, blocked) inflate decline rates and can get your merchant account **temporarily penalized**.
+- **Sub-optimal retry windows** — Retrying during bank maintenance windows (e.g., late-night banking downtime) guarantees repeat failures.
+
+### 5. Blindspots in Churn Analytics
+
+- **Inaccurate MRR reporting** — Without clean logging of recovered amounts *by source* (retry vs. grace portal vs. standard checkout), financial metrics like salvaged MRR and lifetime value get distorted.
