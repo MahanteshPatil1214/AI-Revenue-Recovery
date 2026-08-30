@@ -1,13 +1,16 @@
 # All-in-one AI Revenue Recovery Engine stack (backend + nginx-frontend + Postgres).
-# The Evolution API WhatsApp gateway stays separate in ./evolution (port 9090, its
-# own database) so the app falls back to simulation logging if it is not running.
+# The Evolution API WhatsApp gateway lives in its own ./evolution stack (port 9090,
+# its own database) and is attached here as an external network so the backend can
+# reach it by the service name "evolution-api". If the Evolution stack is not
+# running, the app falls back to simulation logging.
 #
 #   docker compose up --build -d
 #   http://localhost:3000        # control room (via nginx, /api proxied to backend)
 #   http://localhost:8080        # backend direct (optional)
 #
 # Required secrets can be supplied via an .env file next to this compose file or
-# the shell (ADMIN_API_KEY, RAZORPAY_*, DB_PASS, EVOLUTION_ENABLED, ...).
+# the shell (ADMIN_API_KEY, RAZORPAY_*, DB_PASS, EVOLUTION_API_KEY, ...).
+# EVOLUTION_API_KEY must match AUTHENTICATION_API_KEY of the Evolution API stack.
 
 services:
   db:
@@ -37,6 +40,9 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    networks:
+      - default
+      - evolution_default
     environment:
       DB_URL: jdbc:postgresql://db:5432/revenue_recovery
       DB_USER: ${DB_USER:-postgres}
@@ -45,9 +51,12 @@ services:
       RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID:-rzp_test_samplekey123}
       RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET:-sampleSecretKeyXYZ}
       RAZORPAY_WEBHOOK_SECRET: ${RAZORPAY_WEBHOOK_SECRET:-sampleWebhookSecret456}
-      EVOLUTION_ENABLED: ${EVOLUTION_ENABLED:-false}
+      # WhatsApp delivery via Evolution API. Enabled with the instance name that
+      # matches the gateway; the API key must match the gateway's auth key.
+      EVOLUTION_ENABLED: ${EVOLUTION_ENABLED:-true}
       EVOLUTION_BASE_URL: ${EVOLUTION_BASE_URL:-http://evolution-api:8080}
       EVOLUTION_API_KEY: ${EVOLUTION_API_KEY:-}
+      EVOLUTION_INSTANCE_NAME: ${EVOLUTION_INSTANCE_NAME:-recovery-engine}
       MAIL_ENABLED: ${MAIL_ENABLED:-false}
       MAIL_HOST: ${MAIL_HOST:-smtp.gmail.com}
       MAIL_USERNAME: ${MAIL_USERNAME:-}
@@ -68,6 +77,10 @@ services:
       - backend
     ports:
       - "3000:80"
+
+networks:
+  evolution_default:
+    external: true
 
 volumes:
   recovery_pg:
