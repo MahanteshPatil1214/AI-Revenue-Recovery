@@ -56,7 +56,11 @@ services:
       - "8080:8080"
 
   frontend:
-    build: ./frontend/recovery-ui
+    build:
+      context: ./frontend/recovery-ui
+      args:
+        # Must match the backend ADMIN_API_KEY so the baked-in bundle can call admin APIs.
+        VITE_ADMIN_API_KEY: ${ADMIN_API_KEY:-dev_admin_key_2026}
     image: revenue-recovery-frontend:latest
     container_name: recovery-frontend
     restart: unless-stopped

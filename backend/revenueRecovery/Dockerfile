@@ -2,10 +2,10 @@
 FROM maven:3.9-eclipse-temurin-21 AS build
 WORKDIR /build
 COPY pom.xml .
-# Cache dependencies first so rebuilds are fast when sources change
-RUN mvn -B -q dependency:go-offline
 COPY src ./src
-RUN mvn -B -q clean package -DskipTests
+RUN mvn -B -ntp clean package -DskipTests \
+    -Dmaven.wagon.http.retryHandler.count=3 \
+    -Dmaven.wagon.httpconnectionManager.ttlSeconds=120
 
 # Runtime stage: only need a JRE + the jar
 FROM eclipse-temurin:21-jre

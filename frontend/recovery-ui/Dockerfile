@@ -8,6 +8,11 @@ COPY . .
 # An empty VITE_API_BASE_URL makes the built bundle resolve API calls to /api/...,
 # matching the nginx proxy config. (Dev uses http://localhost:8080 from .env.)
 ENV VITE_API_BASE_URL=""
+# Bake the operator key into the bundle so every admin call (reset, radar, analytics,
+# simulate) automatically carries X-Admin-Key. Keep in sync with the backend
+# ADMIN_API_KEY. The login screen is the UX gate on top of this.
+ARG VITE_ADMIN_API_KEY=dev_admin_key_2026
+ENV VITE_ADMIN_API_KEY=$VITE_ADMIN_API_KEY
 RUN npm run build
 
 # Runtime stage: serve static assets with nginx
