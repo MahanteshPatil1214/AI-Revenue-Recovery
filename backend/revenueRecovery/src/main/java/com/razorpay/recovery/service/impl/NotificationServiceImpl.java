@@ -88,13 +88,28 @@ public class NotificationServiceImpl implements NotificationService {
         String displayName = (customerName != null && !customerName.isBlank()) ? customerName : "Valued Customer";
         String displayCurrency = (currency != null && !currency.isBlank()) ? currency : "INR";
         BigDecimal displayAmount = amount != null ? amount : BigDecimal.ZERO;
+        String displayReason = (failureReason != null && !failureReason.isBlank()) ? failureReason : "Bank decline";
 
+        // Official branded dunning message. The sender identity shown on WhatsApp comes
+        // from the linked WhatsApp Business account / instance, not this text; keeping a
+        // clean header + footer makes the message read as a legitimate billing notice.
+        String header = "\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\u2014\n"
+                + "\u26a1 Razorpay Revenue Recovery";
         String message = String.format(
-                "Hello %s, your renewal of %s %.2f failed (%s). Complete payment securely here: %s",
+                "%s\n\n" +
+                "Hi %s,\n\n" +
+                "Your %s %.2f subscription renewal could not be processed.\n" +
+                "Reason: %s.\n\n" +
+                "No action is needed if this was resolved automatically. To pay securely " +
+                "now, open your secure payment link:\n%s\n\n" +
+                "This is an automated billing notice from your service provider. If you " +
+                "believe this is an error, contact support or reply STOP to opt out.\n" +
+                "\u2014 Razorpay Revenue Recovery \u2022 Billing & Payments",
+                header,
                 displayName,
                 displayCurrency,
                 displayAmount,
-                failureReason != null ? failureReason : "Bank decline",
+                displayReason,
                 paymentLink
         );
 
