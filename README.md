@@ -2,10 +2,20 @@
 
 A production-style **Autonomous Revenue Recovery & Smart Dunning Engine** for recurring SaaS payment failures, built with **Java 21 (Spring Boot 3)**, **React + TypeScript + Vite + Tailwind CSS**, **PostgreSQL**, and the **Razorpay** platform (Webhooks + Payment Links).
 
+> **What makes this different** — this isn't a "flag a failed payment" demo. It's an autonomous recovery system that *decides* how to win back lost revenue, then *executes*, *settles* and *audits* the outcome. The genuinely non-common choices:
+>
+> - **It has a judgment layer, not just a webhook.** Every failure is classified *soft* (transient — gateway/bank timeouts worth retrying) vs *hard* (permanent — re-retrying won't help), and routed to a different recovery strategy. Most submissions retry everything blindly.
+> - **Retries are radar-aware, not fixed.** A live bank-health radar + timing engine applies *exponential backoff with jitter*, pauses retries to a bank outright during an outage (circuit-breaker), and re-checks settlement before each attempt — so it never hammers a failing gateway.
+> - **It self-heals.** Any pipeline exception is routed to a dead-letter queue with automated backoff reprocessing, so a dropped/corrupt webhook is retried, not silently lost.
+> - **It's settlement-complete.** It closes the loop on `payment.captured` / `payment_link.paid` (idempotent) and exposes reconciliation + a customer one-click checkout portal — it tracks *money actually collected*, not just "a link was sent".
+> - **Real multi-channel dunning.** HTML email + **live WhatsApp delivery** through a self-hosted open-source gateway — not just "email sent" stubs.
+> - **It's a product.** Auth-gated operations console, live SSE streaming, recovery analytics, CSV financial audit export, batch benchmark harness and a guided demo — all containerized in one `docker compose up`.
+
 ---
 
 ## Table of Contents
 
+- [What Makes This Different](#what-makes-this-different)
 - [What It Does](#what-it-does)
 - [Architecture](#architecture)
 - [Failure Classification](#failure-classification)
