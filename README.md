@@ -108,7 +108,7 @@ Unknown codes default to `UNKNOWN_ERROR` and are treated as **hard failures** (f
 
 - Event enters `SCHEDULED` status with `retryCount=0`, `maxRetries=3`, first attempt at **+15 seconds**.
 - A scheduled poller executes due retries every 10 seconds.
-- Backoff schedule per attempt: `15 × 2^(attempt−1)` seconds **+ 0–5 s random jitter** → **≈15s, ≈30s, ≈60s**.
+- Backoff schedule per attempt: `15 · 2^(attempt−1)` seconds **+ 3–8 s jitter** → **≈15s, ≈45s, ≈90s**.
 - On success (simulated at ~70% in demo mode): status → `RECOVERED_RETRY_SUCCESS`.
 - After exhausting 3 attempts: autonomous escalation — category flips to `PERMANENT_HARD_FAIL`, strategy becomes `EXHAUSTED_ESCALATED_LINK_DISPATCH`, a payment link is generated and dunning email dispatched.
 
@@ -239,7 +239,10 @@ revenue recovery/
 │           │       ├── NotificationService(+Impl).java  # HTML email + SMS/WhatsApp dispatch
 │           └── main/resources/
 │               ├── application.properties
-│               └── db/migrations/V1__init_recovery_events_schema.sql
+│               └── db/migrations/
+│                   ├── V1__init_recovery_events_schema.sql
+│                   ├── V2__add_webhook_ingestion_tables.sql
+│                   └── V3__add_smart_retry_telemetry_columns.sql
 ├── frontend/
 │   └── recovery-ui/                    # React ops dashboard
 │       └── src/
@@ -572,7 +575,7 @@ For deeper scenarios (batch benchmark, DLQ resilience, customer checkout, audit 
 - [x] API-key auth on management/radar/test endpoints
 - [x] Externalized frontend API URL (`VITE_API_BASE_URL`)
 - [x] Unit test coverage (retry engine, timing/radar, analytics, webhook HMAC, auth gate)
-- [x] CI pipeline (GitHub Actions): backend `mvn verify` (Java 21) + frontend typecheck/build
+- [x] CI pipeline (GitHub Actions): backend `mvn verify` (Java 21), frontend typecheck/build, and Docker image build (`docker compose config` + each Dockerfile)
 - [x] WhatsApp delivery via open-source **Evolution API** gateway (self-hosted, REST) with console-simulation fallback
 - [x] Landing page + tabbed control room (Dashboard / Bank Radar / Analytics) with home navigation
 - [x] Transient (soft) failures also receive a payable Razorpay recovery link alongside smart retry
