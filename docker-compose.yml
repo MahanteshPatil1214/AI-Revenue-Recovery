@@ -67,6 +67,7 @@ services:
       MAIL_HOST: ${MAIL_HOST:-smtp.gmail.com}
       MAIL_USERNAME: ${MAIL_USERNAME:-}
       MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+      MAIL_FROM: ${MAIL_FROM:-billing@recoveryengine.io}
     ports:
       - "8080:8080"
 
