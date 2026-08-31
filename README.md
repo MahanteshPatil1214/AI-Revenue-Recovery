@@ -271,6 +271,8 @@ Base URL: `http://localhost:8080`
 
 ### REST API
 
+> **Interactive docs:** the backend exposes **Swagger UI** — open `http://localhost:8080/swagger-ui.html` (or the raw OpenAPI 3.0 JSON at `/v3/api-docs`) to explore and **execute every endpoint live** from the browser. Use the **Authorize** button to set the `X-Admin-Key` for the gated management/radar/test routes.
+
 #### Webhooks
 | Method | Endpoint | Description |
 |---|---|---|
