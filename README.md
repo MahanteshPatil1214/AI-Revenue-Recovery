@@ -32,6 +32,7 @@ A production-style **Autonomous Revenue Recovery & Smart Dunning Engine** for re
 - [Frontend Reference](#frontend-reference)
 - [Getting Started](#getting-started)
 - [Demo Walkthrough](#demo-walkthrough)
+- [Screenshots](#screenshots)
 - [Project Status](#project-status)
 - [Known Limitations](#known-limitations)
 - [Consequences & Lessons Learned](./consequences.md)
@@ -533,6 +534,23 @@ For deeper scenarios (batch benchmark, DLQ resilience, customer checkout, audit 
 | Customer checkout | Open an escalated event's portal flow | Choose UPI/Card/Netbanking → authorize → animated receipt; dashboard updates in real time. |
 | DLQ resilience | `POST /api/v1/test/simulate-dlq` | Corrupt payload lands in `RETRY_PENDING`; watch the 20 s reprocessor bounce it until `DEAD_LETTER`. |
 | Audit export | Click **Export Financial Audit CSV** | Downloads `dunning_recovery_report_<today>.csv` with all events. |
+
+---
+
+## Screenshots
+
+| | |
+|---|---|
+| **01 · Landing page** – product story & guided demo entry | **02 · How recovery works** – soft vs hard classification |
+| ![Landing](outputs/01-landing.png) | ![How recovery works](outputs/02-how-recovery-works.png) |
+| **03 · What's inside** – features at a glance | **04 · Dashboard** – real-time control room (KPIs, live + server analytics, agent traces, email preview) |
+| ![What's inside](outputs/03-whats-inside.png) | ![Dashboard](outputs/04-dashboard.png) |
+| **05 · Bank Radar** – live rail health, circuit-breaker, outage simulation | **06 · Analytics** – recovery efficiency, salvage split, funnel |
+| ![Bank Radar](outputs/05-bank-radar.png) | ![Analytics](outputs/06-analytics.png) |
+| **07 · Cohort distribution** – churn-cohort funnel | **08 · WhatsApp message** – real dunning notice via Evolution API gateway |
+| ![Cohort distribution](outputs/07-cohort-distribution.png) | ![WhatsApp message](outputs/08-whatsapp-message.png) |
+| **09 · Email preview** – rendered dunning email with payment CTA | **10 · Payment page** – real Razorpay test checkout from generated link |
+| ![Email preview](outputs/09-email-preview.png) | ![Payment page](outputs/10-payment-page.png) |
 
 ---
 
