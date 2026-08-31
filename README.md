@@ -506,9 +506,7 @@ Click **Hard Fail** in the header — within seconds you'll see the event classi
 
 ## Demo Walkthrough
 
-> **Presentation tip:** the app opens on the landing page, which tells the story for you. Open the console and narrate the three-act flow below — it maps directly to the on-screen tabs.
-
-| Act | Action | What the panel sees |
+| Act | Action | Expected behavior |
 |---|---|---|
 | 1 — Soft fail | Open **Bank Radar** tab, click **Soft Fail** in the header | The event is classified transient, scheduled with Gaussian-jittered timing, and auto-recovers via smart retry to a green `RECOVERED_RETRY_SUCCESS` card — with a Razorpay link available. |
 | 2 — Hard fail | Click **Hard Fail** | Immediate classification to `RECOVERED_ACTION_TAKEN`, a real Razorpay payment link generated, "Email Dispatched", and **Preview** shows the exact customer email. |
