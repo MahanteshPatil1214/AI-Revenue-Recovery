@@ -19,9 +19,4 @@ public class RecoveryOptionsResponse {
     private double discountedAmount;
     private double discountSavings;
     private String discountedPaymentUrl;
-
-    // 3. Plan downgrade link (Switch to monthly)
-    private boolean eligibleForMonthlyDowngrade;
-    private double monthlyAmount;
-    private String monthlyPaymentUrl;
 }

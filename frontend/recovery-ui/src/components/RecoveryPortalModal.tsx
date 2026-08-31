@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { X, Sparkles, ShieldAlert, ArrowRight, Percent, Calendar } from 'lucide-react';
+import { X, Sparkles, ShieldAlert, ArrowRight, Percent } from 'lucide-react';
 import { API_CUSTOMER_URL } from '../config/api';
 
 interface RecoveryOptions {
@@ -12,9 +12,6 @@ interface RecoveryOptions {
   discountedAmount: number;
   discountSavings: number;
   discountedPaymentUrl: string;
-  eligibleForMonthlyDowngrade: boolean;
-  monthlyAmount: number;
-  monthlyPaymentUrl: string;
 }
 
 export interface RecoveryPortalModalProps {
@@ -57,7 +54,6 @@ export const RecoveryPortalModal: React.FC<RecoveryPortalModalProps> = ({ paymen
   const originalAmt = data?.originalAmount ?? 0;
   const discountSavings = data?.discountSavings ?? 0;
   const discountedAmt = data?.discountedAmount ?? 0;
-  const monthlyAmt = data?.monthlyAmount ?? 0;
   const originalUrl = data?.originalPaymentUrl || `http://localhost:5173/?payId=${paymentId}&amt=${originalAmt}`;
 
   return (
@@ -151,32 +147,6 @@ export const RecoveryPortalModal: React.FC<RecoveryPortalModalProps> = ({ paymen
               </a>
             </div>
 
-            {/* Option 3: Flexible Monthly Downgrade */}
-            {data.eligibleForMonthlyDowngrade && (
-              <div className="bg-slate-800/50 hover:bg-slate-800/80 border border-indigo-500/30 rounded-xl p-4 transition">
-                <div className="flex justify-between items-center">
-                  <div>
-                    <h4 className="text-sm font-bold text-indigo-300 flex items-center gap-1.5">
-                      <Calendar size={14} /> Switch to Flexible Monthly Billing
-                    </h4>
-                    <p className="text-xs text-slate-400 mt-0.5">Lower immediate upfront cost to keep continuous service</p>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-base font-mono font-bold text-indigo-400">
-                      ₹{monthlyAmt.toFixed(2)} <span className="text-[10px] text-slate-400">/mo</span>
-                    </div>
-                  </div>
-                </div>
-                <a
-                  href={data.monthlyPaymentUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="mt-3.5 w-full bg-slate-700 hover:bg-slate-600 text-white font-semibold text-xs py-2 px-3 rounded-lg flex items-center justify-center gap-1.5 transition"
-                >
-                  Switch to Monthly for ₹{monthlyAmt.toFixed(2)} <ArrowRight size={14} />
-                </a>
-              </div>
-            )}
           </div>
         )}
       </div>

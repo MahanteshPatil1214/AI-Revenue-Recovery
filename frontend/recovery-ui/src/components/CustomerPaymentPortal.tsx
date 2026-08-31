@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ShieldCheck, CheckCircle2, CreditCard, Lock, ArrowLeft, Percent, Calendar } from 'lucide-react';
+import { ShieldCheck, CheckCircle2, CreditCard, Lock, ArrowLeft, Percent } from 'lucide-react';
 import { API_CUSTOMER_URL } from '../config/api';
 import type { DunningEvent } from '../types/recovery';
 
@@ -8,7 +8,7 @@ interface CustomerPaymentPortalProps {
   onBackToDashboard: () => void;
 }
 
-const VALID_PLAN_TYPES = new Set(['DISCOUNTED_10PCT', 'MONTHLY_DOWNGRADE']);
+const VALID_PLAN_TYPES = new Set(['DISCOUNTED_10PCT']);
 
 export const CustomerPaymentPortal: React.FC<CustomerPaymentPortalProps> = ({
   paymentId,
@@ -24,7 +24,7 @@ export const CustomerPaymentPortal: React.FC<CustomerPaymentPortalProps> = ({
   const rawAmt = params.get('amt');
   const overrideAmount = rawAmt && !isNaN(Number(rawAmt)) && Number(rawAmt) > 0 ? Number(rawAmt) : null;
   const rawPlan = params.get('plan');
-  const planType = rawPlan && VALID_PLAN_TYPES.has(rawPlan) ? rawPlan as 'DISCOUNTED_10PCT' | 'MONTHLY_DOWNGRADE' : null;
+  const planType = rawPlan && VALID_PLAN_TYPES.has(rawPlan) ? rawPlan as 'DISCOUNTED_10PCT' : null;
 
   useEffect(() => {
     const controller = new AbortController();
@@ -46,7 +46,6 @@ export const CustomerPaymentPortal: React.FC<CustomerPaymentPortalProps> = ({
   const displayAmount = overrideAmount ?? event?.amount ?? 0;
   const originalAmount = event?.amount ?? 0;
   const isDiscounted = planType === 'DISCOUNTED_10PCT' && overrideAmount !== null;
-  const isMonthly = planType === 'MONTHLY_DOWNGRADE' && overrideAmount !== null;
 
   const handleCompletePayment = async () => {
     setPaying(true);
@@ -54,7 +53,7 @@ export const CustomerPaymentPortal: React.FC<CustomerPaymentPortalProps> = ({
       const res = await fetch(`${API_CUSTOMER_URL}/resolve/${paymentId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ method: isDiscounted ? '10% Grace Discount' : isMonthly ? 'Monthly Downgrade' : selectedMethod }),
+        body: JSON.stringify({ method: isDiscounted ? '10% Grace Discount' : selectedMethod }),
       });
       if (res.ok) {
         setPaymentSuccess(true);
@@ -146,20 +145,13 @@ export const CustomerPaymentPortal: React.FC<CustomerPaymentPortalProps> = ({
                 <span className="ml-auto font-mono text-emerald-600">Save ₹{(originalAmount - displayAmount).toFixed(2)}</span>
               </div>
             )}
-            {isMonthly && (
-              <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-3 flex items-center gap-2.5 text-xs text-indigo-800">
-                <Calendar size={16} className="text-indigo-600 shrink-0" />
-                <span className="font-bold">Flexible Monthly Billing Plan</span>
-                <span className="ml-auto font-mono text-indigo-600">was ₹{originalAmount.toFixed(2)}/yr</span>
-              </div>
-            )}
 
             {/* Invoice Summary */}
             <div className="flex justify-between items-center pb-4 border-b border-slate-100">
               <div>
                 <span className="text-xs text-slate-400 font-mono">Invoice #{event.paymentId.substring(4)}</span>
                 <h3 className="text-lg font-bold text-slate-900">
-                  {isMonthly ? 'Monthly Subscription Renewal' : 'Subscription Renewal'}
+                  Subscription Renewal
                 </h3>
                 <p className="text-xs text-slate-500">{event.customerEmail}</p>
               </div>
@@ -169,7 +161,6 @@ export const CustomerPaymentPortal: React.FC<CustomerPaymentPortalProps> = ({
                   <div className="text-sm text-slate-400 line-through font-mono">₹{originalAmount.toFixed(2)}</div>
                 )}
                 <div className="text-2xl font-black text-slate-950">₹{displayAmount.toFixed(2)}</div>
-                {isMonthly && <div className="text-xs text-slate-400">/month</div>}
               </div>
             </div>
 

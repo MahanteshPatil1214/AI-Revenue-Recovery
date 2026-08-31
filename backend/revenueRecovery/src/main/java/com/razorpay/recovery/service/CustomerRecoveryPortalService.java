@@ -42,16 +42,6 @@ public class CustomerRecoveryPortalService {
         // 3. Discounted payment link via Razorpay API
         String discountedUrl = generateRazorpayLink(discountedAmount, contact, email, paymentId, "10% Grace Discount");
 
-        // 4. Monthly downgrade option (for annual/higher amount tiers)
-        boolean isDowngradeEligible = originalAmount >= 500.0;
-        double monthlyAmount = isDowngradeEligible
-                ? BigDecimal.valueOf(originalAmount / 10.0).setScale(2, RoundingMode.HALF_UP).doubleValue()
-                : originalAmount;
-
-        String monthlyUrl = isDowngradeEligible
-                ? generateRazorpayLink(monthlyAmount, contact, email, paymentId, "Monthly Downgrade Plan")
-                : "";
-
         return RecoveryOptionsResponse.builder()
                 .paymentId(paymentId)
                 .customerEmail(event.getCustomerEmail())
@@ -62,9 +52,6 @@ public class CustomerRecoveryPortalService {
                 .discountedAmount(discountedAmount)
                 .discountSavings(discountSavings)
                 .discountedPaymentUrl(discountedUrl)
-                .eligibleForMonthlyDowngrade(isDowngradeEligible)
-                .monthlyAmount(monthlyAmount)
-                .monthlyPaymentUrl(monthlyUrl)
                 .build();
     }
 
