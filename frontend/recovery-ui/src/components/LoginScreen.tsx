@@ -48,7 +48,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onAuthenticated }) => 
               </div>
               <div>
                 <h1 className="text-lg font-bold text-white tracking-tight">
-                  Recovery Engine Console
+                  Razorpay AI Revenue Recovery Engine
                 </h1>
                 <p className="text-xs text-slate-400">Operator authentication</p>
               </div>
