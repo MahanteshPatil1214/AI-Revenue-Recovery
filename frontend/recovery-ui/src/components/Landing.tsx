@@ -47,7 +47,7 @@ export const Landing: React.FC<LandingProps> = ({ onEnter }) => {
               <IndianRupee size={16} className="text-white" />
             </div>
             <div className="leading-tight">
-              <div className="font-semibold tracking-tight text-slate-900 text-sm">Revenue Recovery Engine</div>
+              <div className="font-semibold tracking-tight text-slate-900 text-sm">Razorpay AI Revenue Recovery Engine</div>
             </div>
           </div>
           <button
